@@ -1,0 +1,8 @@
+path: c:/Users/11a2l/OneDrive/Pictures/TTCS_test/dataset_plate
+train: images/train
+val: images/val
+test: # test images (optional)
+
+# Classes
+names:
+  0: plate
