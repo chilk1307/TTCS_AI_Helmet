@@ -45,11 +45,15 @@ def load_models():
 model_s1, model_s2, model_s3 = load_models()
 
 # ══════════════════════════════════════════════════════════
-# 2. ĐƯỜNG DẪN OUTPUT CỐ ĐỊNH
+# 2. ĐƯỜNG DẪN OUTPUT RIÊNG CHO GIAO DIỆN WEB
+#    - outputs/reports/  → CSV danh sách vi phạm
+#    - outputs/images/   → Ảnh bằng chứng vi phạm
+#    (Tách biệt hoàn toàn với test_outputs/ của terminal)
 # ══════════════════════════════════════════════════════════
-OUTPUT_DIR  = "test_outputs"
-CSV_PATH    = os.path.join(OUTPUT_DIR, "Danh_Sach_Phat_Nguoi.csv")
-os.makedirs(os.path.join(OUTPUT_DIR, "Bang_Chung"), exist_ok=True)
+WEB_OUTPUT_DIR = "outputs"
+CSV_PATH       = os.path.join(WEB_OUTPUT_DIR, "reports", "Danh_Sach_Phat_Nguoi.csv")
+os.makedirs(os.path.join(WEB_OUTPUT_DIR, "reports"), exist_ok=True)
+os.makedirs(os.path.join(WEB_OUTPUT_DIR, "images"), exist_ok=True)
 
 # ══════════════════════════════════════════════════════════
 # 3. CUSTOM CSS – Giao diện tối, hiện đại
@@ -185,8 +189,8 @@ div[data-testid="stFileUploader"]:hover {
 # 4. HÀM TIỆN ÍCH
 # ══════════════════════════════════════════════════════════
 
-def load_csv():
-    """Đọc file CSV danh sách phạt nguội (nếu tồn tại)."""
+def load_web_csv():
+    """Đọc file CSV danh sách phạt nguội từ thư mục giao diện web."""
     if os.path.isfile(CSV_PATH):
         try:
             df = pd.read_csv(CSV_PATH, encoding="utf-8")
@@ -289,8 +293,8 @@ st.markdown('<div class="styled-divider"></div>', unsafe_allow_html=True)
 st.markdown("### 📋 Danh sách Vi phạm Phạt nguội")
 table_area = st.empty()
 
-# Hiển thị dữ liệu CSV ban đầu (nếu đã có sẵn)
-df_initial = load_csv()
+# Hiển thị dữ liệu CSV ban đầu (nếu đã có sẵn từ lần chạy trước trên web)
+df_initial = load_web_csv()
 if not df_initial.empty:
     table_area.dataframe(df_initial, use_container_width=True, hide_index=True)
 else:
@@ -330,14 +334,14 @@ if btn_process:
         st.session_state.total_vehicles = vehicle_count
 
         # Đếm số vi phạm trước xử lý (đọc CSV trước)
-        df_before = load_csv()
+        df_before = load_web_csv()
         rows_before = len(df_before) if not df_before.empty else 0
 
         # Tạo tracker mới cho ảnh đơn lẻ
         tracker = ViolationTracker()
 
-        # Gọi pipeline xử lý
-        result_img = process_logic(img, model_s1, model_s2, model_s3, OUTPUT_DIR, tracker)
+        # Gọi pipeline xử lý (is_video=False cho ảnh tĩnh)
+        result_img = process_logic(img, model_s1, model_s2, model_s3, WEB_OUTPUT_DIR, tracker, is_video=False)
 
         # Chuyển BGR → RGB để hiển thị đúng màu trên Streamlit
         result_rgb = cv2.cvtColor(result_img, cv2.COLOR_BGR2RGB)
@@ -346,7 +350,7 @@ if btn_process:
         display_area.image(result_rgb, caption="📸 Kết quả phân tích ảnh", use_container_width=True)
 
         # Cập nhật số vi phạm mới
-        df_after = load_csv()
+        df_after = load_web_csv()
         rows_after = len(df_after) if not df_after.empty else 0
         new_violations = rows_after - rows_before
         st.session_state.total_violations = new_violations
@@ -377,7 +381,7 @@ if btn_process:
         fps = int(cap.get(cv2.CAP_PROP_FPS)) or 25
 
         # Đếm vi phạm trước xử lý
-        df_before = load_csv()
+        df_before = load_web_csv()
         rows_before = len(df_before) if not df_before.empty else 0
 
         # Tạo tracker mới cho video
@@ -399,8 +403,8 @@ if btn_process:
             v_count = count_vehicles_in_frame(frame, model_s1)
             cumulative_vehicles = max(cumulative_vehicles, v_count)
 
-            # Gọi pipeline chính
-            processed = process_logic(frame, model_s1, model_s2, model_s3, OUTPUT_DIR, tracker)
+            # Gọi pipeline chính (is_video=True cho video)
+            processed = process_logic(frame, model_s1, model_s2, model_s3, WEB_OUTPUT_DIR, tracker, is_video=True)
 
             # Chuyển BGR → RGB
             processed_rgb = cv2.cvtColor(processed, cv2.COLOR_BGR2RGB)
@@ -416,7 +420,7 @@ if btn_process:
             st.session_state.total_vehicles = cumulative_vehicles
 
             # Cập nhật bảng vi phạm liên tục
-            df_live = load_csv()
+            df_live = load_web_csv()
             if not df_live.empty:
                 rows_now = len(df_live)
                 st.session_state.total_violations = rows_now - rows_before
@@ -433,7 +437,7 @@ if btn_process:
         progress_bar.progress(1.0, text="✅ Hoàn tất xử lý video!")
 
         # Cập nhật trạng thái cuối cùng
-        df_final = load_csv()
+        df_final = load_web_csv()
         final_violations = (len(df_final) - rows_before) if not df_final.empty else 0
         st.session_state.total_violations = final_violations
         st.session_state.system_status = "✅ Hoàn tất"
