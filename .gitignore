@@ -11,10 +11,8 @@ __pycache__/
 # train results
 runs/
 
+# model weights
+*.pt
+
 # env
 .env
-# models
-models/
-
-# outputs
-test_outputs/
