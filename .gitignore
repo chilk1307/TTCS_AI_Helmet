@@ -1,0 +1,20 @@
+# venv
+venv/
+.venv/
+
+# python cache
+__pycache__/
+
+# vscode
+.vscode/
+
+# train results
+runs/
+
+# env
+.env
+# models
+models/
+
+# outputs
+test_outputs/
