@@ -40,11 +40,13 @@ def compute_skew(src_img):
     cnt = 0
     for x1, y1, x2, y2 in lines[min_line_pos]:
         ang = np.arctan2(y2 - y1, x2 - x1)
-        if math.fabs(ang) <= 30: # Chỉ xoay nếu nghiêng nhẹ, nghiêng quá bỏ qua
-            angle += ang
+        # Chuyển sang độ rồi mới so sánh (arctan2 trả về radian, max ±3.14)
+        ang_degree = math.degrees(ang)
+        if math.fabs(ang_degree) <= 30:  # Chỉ xoay nếu nghiêng ≤ 30°
+            angle += ang_degree
             cnt += 1
             
-    return (angle / cnt) * 180 / math.pi if cnt > 0 else 0.0
+    return (angle / cnt) if cnt > 0 else 0.0
 
 # HÀM TỔNG HỢP GỌI TỪ MAIN: Vừa chống lóa, vừa nắn thẳng
 def preprocess_and_deskew(src_img):

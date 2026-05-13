@@ -4,15 +4,28 @@ venv/
 
 # python cache
 __pycache__/
+*.pyc
 
-# vscode
+# vscode / IDE
 .vscode/
+.idea/
 
 # train results
 runs/
 
-# model weights
+# model weights (tải riêng, không push lên Git)
 *.pt
 
 # env
 .env
+
+# Kết quả output (không push lên Git)
+outputs/
+test_outputs/
+
+# OS generated
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/

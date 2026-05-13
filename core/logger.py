@@ -12,7 +12,8 @@ def log_violation(plate_text, evidence_img, output_dir):
       - Terminal/CLI    (output_dir = "test_outputs") → ảnh vào Bang_Chung/, CSV ở root
     """
     now = datetime.now()
-    timestamp_str = now.strftime("%Y%m%d_%H%M%S")
+    # Thêm microsecond vào tên file để tránh trùng khi 2 vi phạm xảy ra cùng giây
+    timestamp_str = now.strftime("%Y%m%d_%H%M%S_%f")
     time_display = now.strftime("%Y-%m-%d %H:%M:%S")
     
     if not plate_text:

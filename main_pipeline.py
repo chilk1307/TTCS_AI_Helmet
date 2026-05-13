@@ -23,7 +23,23 @@ COLORS = {
 # ==========================================
 # TRÁI TIM CỦA HỆ THỐNG: LUỒNG XỬ LÝ LOGIC
 # ==========================================
+# Kích thước tối thiểu của biển số (pixel) để OCR có thể đọc được
+MIN_PLATE_WIDTH = 30
+MIN_PLATE_HEIGHT = 15
+
 def process_logic(img, model_s1, model_s2, model_s3, output_dir, tracker, is_video=False):
+    """
+    Luồng xử lý chính: Detect xe → Detect mũ/biển số → OCR → Ghi biên bản.
+    
+    Trả về: (img_đã_vẽ, stats_dict)
+      stats_dict = {
+        'total_vehicles': int,       # Số xe phát hiện trong frame
+        'violations_this_frame': int # Số vi phạm MỚI trong frame này
+      }
+    """
+    # Khởi tạo bộ đếm thống kê cho frame này
+    stats = {'total_vehicles': 0, 'violations_this_frame': 0}
+    
     # 1. BẬT CHẾ ĐỘ QUÉT THÔNG MINH THEO LOẠI ĐẦU VÀO
     if is_video:
         # Video: Cần Tracking để cấp ID và theo dõi (chống spam file Excel)
@@ -34,7 +50,10 @@ def process_logic(img, model_s1, model_s2, model_s3, output_dir, tracker, is_vid
     
     # Nếu khung hình không có xe máy nào, bỏ qua luôn cho nhẹ máy
     if res_s1.boxes is None:
-        return img
+        return img, stats
+
+    # Đếm tổng số xe trong frame
+    stats['total_vehicles'] = len(res_s1.boxes)
 
     # 2. XỬ LÝ TỪNG ĐỐI TƯỢNG XE MÁY TÌM ĐƯỢC
     for index, box1 in enumerate(res_s1.boxes):
@@ -54,8 +73,8 @@ def process_logic(img, model_s1, model_s2, model_s3, output_dir, tracker, is_vid
         crop_img = img[y1:y2, x1:x2]
         if crop_img.size == 0: continue
             
-        # 3. NHẬN DIỆN MŨ BẢO HIỂM VÀ BIỂN SỐ (Stage 2)
-        res_s2 = model_s2.predict(crop_img, conf=0.35, verbose=False)[0]
+        # 3. NHẬN DIỆN MŨ BẢO HIỂM VÀ BIỂN SỐ (Stage 2) — conf tăng lên 0.45 giảm false positive
+        res_s2 = model_s2.predict(crop_img, conf=0.45, verbose=False)[0]
         
         violation_detected = False
         plate_box = None
@@ -78,24 +97,29 @@ def process_logic(img, model_s1, model_s2, model_s3, output_dir, tracker, is_vid
         final_plate_text = ""
         if plate_box is not None:
             px1, py1, px2, py2 = plate_box
-            plate_crop = crop_img[py1:py2, px1:px2]
+            pw, ph = px2 - px1, py2 - py1
             
-            if plate_crop.size > 0:
-                # Gọi chuyên gia xử lý ảnh để nắn thẳng và khử lóa
-                clean_plate = preprocess_and_deskew(plate_crop) 
-                # Gọi chuyên gia OCR để đọc chữ
-                final_plate_text = read_plate_yolo26(clean_plate, model_s3)
+            # Lọc biển số quá nhỏ — OCR sẽ cho kết quả rác
+            if pw >= MIN_PLATE_WIDTH and ph >= MIN_PLATE_HEIGHT:
+                plate_crop = crop_img[py1:py2, px1:px2]
+                
+                if plate_crop.size > 0:
+                    # Gọi chuyên gia xử lý ảnh để nắn thẳng và khử lóa
+                    clean_plate = preprocess_and_deskew(plate_crop) 
+                    # Gọi chuyên gia OCR để đọc chữ
+                    final_plate_text = read_plate_yolo26(clean_plate, model_s3)
                 
         # 5. GHI BIÊN BẢN & HIỂN THỊ KẾT QUẢ
         if final_plate_text:
             if violation_detected:
-                # Hiển thị chữ cảnh báo nhấp nháy trên màn hình
+                # Hiển thị chữ cảnh báo trên màn hình
                 cv2.putText(img, f"PHAT NGUOI: {final_plate_text}", (x1, y1 - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, COLORS['nohelmet'], 2)
                 
                 # Logic ghi sổ: Nếu là Ảnh -> Ghi luôn. Nếu là Video -> Hỏi Tracker xem ghi chưa.
                 if (not is_video) or (not tracker.is_logged(track_id)):
                     log_violation(final_plate_text, crop_img, output_dir)
                     print(f"🚨 ĐÃ LẬP BIÊN BẢN (ID {track_id}): {final_plate_text}")
+                    stats['violations_this_frame'] += 1
                     
                     if is_video:
                         tracker.mark_as_logged(track_id) # Khóa ID lại không cho ghi trùng lặp
@@ -103,7 +127,7 @@ def process_logic(img, model_s1, model_s2, model_s3, output_dir, tracker, is_vid
                 # Người chấp hành tốt, hiển thị chữ màu xanh
                 cv2.putText(img, f"AN TOAN: {final_plate_text}", (x1, y1 - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, COLORS['helmet'], 2)
 
-    return img
+    return img, stats
 
 # ==========================================
 # HÀM CHẠY CHÍNH TỔNG HỢP (MAIN)
@@ -139,7 +163,7 @@ def main():
                 print(f"🖼️ Đang quét Ảnh tĩnh: {filename}...")
                 tracker = ViolationTracker() # Reset tracker
                 # Chú ý: is_video=False
-                img = process_logic(img, model_s1, model_s2, model_s3, output_dir, tracker, is_video=False)
+                img, _ = process_logic(img, model_s1, model_s2, model_s3, output_dir, tracker, is_video=False)
                 cv2.imwrite(out_path, img)
                 print(f"✅ Đã xử lý xong Ảnh: {filename}")
         
@@ -157,7 +181,7 @@ def main():
                 if not ret: break
                 
                 # Chú ý: is_video=True
-                frame = process_logic(frame, model_s1, model_s2, model_s3, output_dir, tracker, is_video=True)
+                frame, _ = process_logic(frame, model_s1, model_s2, model_s3, output_dir, tracker, is_video=True)
                 out.write(frame)
                 
             cap.release()

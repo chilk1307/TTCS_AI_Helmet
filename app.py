@@ -11,10 +11,7 @@ import streamlit as st
 import cv2
 import os
 import tempfile
-import time
-import numpy as np
 import pandas as pd
-from datetime import datetime
 from ultralytics import YOLO
 
 # ── Import pipeline & tracker từ project ──────────────────
@@ -208,16 +205,13 @@ def save_upload_to_temp(uploaded_file):
     tmp.close()
     return tmp.name
 
+# (Đã xóa hàm count_vehicles_in_frame — giờ lấy số liệu từ metadata của process_logic)
 
-def count_vehicles_in_frame(frame, model):
-    """Đếm nhanh số xe (bounding box) trong 1 frame bằng Stage-1."""
-    try:
-        res = model.predict(frame, conf=0.5, verbose=False)[0]
-        if res.boxes is not None:
-            return len(res.boxes)
-    except Exception:
-        pass
-    return 0
+# Số frame bỏ qua khi xử lý video (cứ SKIP_FRAMES frame mới xử lý 1)
+SKIP_FRAMES = 2
+
+# Tần suất cập nhật bảng CSV (mỗi N frame đọc CSV 1 lần, giảm I/O)
+CSV_UPDATE_INTERVAL = 15
 
 # ══════════════════════════════════════════════════════════
 # 5. SIDEBAR – Cài đặt hệ thống
@@ -246,6 +240,24 @@ with st.sidebar:
     # Nút xử lý
     btn_process = st.button("🚀 Bắt đầu Xử lý", use_container_width=True)
 
+    st.markdown('<div class="styled-divider"></div>', unsafe_allow_html=True)
+
+    # Nút xóa lịch sử vi phạm
+    if st.button("🗑️ Xóa lịch sử vi phạm", use_container_width=True):
+        # Xóa file CSV và toàn bộ ảnh bằng chứng của Web UI
+        if os.path.isfile(CSV_PATH):
+            os.remove(CSV_PATH)
+        img_dir = os.path.join(WEB_OUTPUT_DIR, "images")
+        if os.path.isdir(img_dir):
+            for f in os.listdir(img_dir):
+                fp = os.path.join(img_dir, f)
+                if os.path.isfile(fp):
+                    os.remove(fp)
+        st.session_state.total_vehicles = 0
+        st.session_state.total_violations = 0
+        st.sidebar.success("✅ Đã xóa toàn bộ lịch sử vi phạm!")
+        st.rerun()
+
     # Thông tin thêm
     st.markdown('<div class="styled-divider"></div>', unsafe_allow_html=True)
     st.markdown("#### 📌 Hướng dẫn nhanh")
@@ -264,7 +276,7 @@ with st.sidebar:
 st.markdown('<p class="main-title">🚦 HỆ THỐNG AI NHẬN DIỆN PHẠT NGUỘI GIAO THÔNG</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-title">Phát hiện vi phạm không đội mũ bảo hiểm · Nhận diện biển số tự động · Lập biên bản tức thì</p>', unsafe_allow_html=True)
 
-# ── Hàng 1: Metrics ───────────────────────────────────────
+# ── Hàng 1: Metrics (dùng placeholder để cập nhật real-time) ──
 col_m1, col_m2, col_m3 = st.columns(3)
 
 # Khởi tạo session_state nếu chưa có
@@ -275,12 +287,15 @@ if "total_violations" not in st.session_state:
 if "system_status" not in st.session_state:
     st.session_state.system_status = "⏳ Chờ dữ liệu"
 
-with col_m1:
-    st.metric(label="🏍️ Tổng số xe phát hiện", value=st.session_state.total_vehicles)
-with col_m2:
-    st.metric(label="🚨 Số xe vi phạm", value=st.session_state.total_violations)
-with col_m3:
-    st.metric(label="📡 Trạng thái hệ thống", value=st.session_state.system_status)
+# Tạo placeholder cho từng metric — cho phép cập nhật tại chỗ sau khi xử lý
+metric_vehicles   = col_m1.empty()
+metric_violations = col_m2.empty()
+metric_status     = col_m3.empty()
+
+# Hiển thị giá trị ban đầu
+metric_vehicles.metric(label="🏍️ Tổng số xe phát hiện", value=st.session_state.total_vehicles)
+metric_violations.metric(label="🚨 Số xe vi phạm", value=st.session_state.total_violations)
+metric_status.metric(label="📡 Trạng thái hệ thống", value=st.session_state.system_status)
 
 st.markdown('<div class="styled-divider"></div>', unsafe_allow_html=True)
 
@@ -329,19 +344,23 @@ if btn_process:
             st.error("❌ Không đọc được ảnh. Vui lòng kiểm tra file.")
             st.stop()
 
-        # Đếm số xe trước khi xử lý
-        vehicle_count = count_vehicles_in_frame(img, model_s1)
-        st.session_state.total_vehicles = vehicle_count
-
-        # Đếm số vi phạm trước xử lý (đọc CSV trước)
-        df_before = load_web_csv()
-        rows_before = len(df_before) if not df_before.empty else 0
-
         # Tạo tracker mới cho ảnh đơn lẻ
         tracker = ViolationTracker()
 
-        # Gọi pipeline xử lý (is_video=False cho ảnh tĩnh)
-        result_img = process_logic(img, model_s1, model_s2, model_s3, WEB_OUTPUT_DIR, tracker, is_video=False)
+        # Gọi pipeline xử lý (is_video=False cho ảnh tĩnh) — trả về cả ảnh lẫn metadata
+        result_img, stats = process_logic(img, model_s1, model_s2, model_s3, WEB_OUTPUT_DIR, tracker, is_video=False)
+
+        # Lấy số liệu từ metadata (không cần chạy model lần 2 nữa!)
+        vehicle_count = stats['total_vehicles']
+        new_violations = stats['violations_this_frame']
+        st.session_state.total_vehicles = vehicle_count
+        st.session_state.total_violations = new_violations
+        st.session_state.system_status = "✅ Hoàn tất"
+
+        # 🔥 Cập nhật metric cards NGAY LẬP TỨC trên giao diện
+        metric_vehicles.metric(label="🏍️ Tổng số xe phát hiện", value=vehicle_count)
+        metric_violations.metric(label="🚨 Số xe vi phạm", value=new_violations)
+        metric_status.metric(label="📡 Trạng thái hệ thống", value="✅ Hoàn tất")
 
         # Chuyển BGR → RGB để hiển thị đúng màu trên Streamlit
         result_rgb = cv2.cvtColor(result_img, cv2.COLOR_BGR2RGB)
@@ -349,17 +368,10 @@ if btn_process:
         # Hiển thị ảnh kết quả
         display_area.image(result_rgb, caption="📸 Kết quả phân tích ảnh", use_container_width=True)
 
-        # Cập nhật số vi phạm mới
-        df_after = load_web_csv()
-        rows_after = len(df_after) if not df_after.empty else 0
-        new_violations = rows_after - rows_before
-        st.session_state.total_violations = new_violations
-
         # Cập nhật bảng vi phạm
+        df_after = load_web_csv()
         if not df_after.empty:
             table_area.dataframe(df_after, use_container_width=True, hide_index=True)
-
-        st.session_state.system_status = "✅ Hoàn tất"
 
         # Dọn file tạm
         os.unlink(tmp_path)
@@ -380,31 +392,40 @@ if btn_process:
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = int(cap.get(cv2.CAP_PROP_FPS)) or 25
 
-        # Đếm vi phạm trước xử lý
-        df_before = load_web_csv()
-        rows_before = len(df_before) if not df_before.empty else 0
-
         # Tạo tracker mới cho video
         tracker = ViolationTracker()
 
-        # Thanh tiến trình
+        # Thanh tiến trình + nút dừng
         progress_bar = st.progress(0, text="⏳ Chuẩn bị xử lý video…")
+        stop_btn = st.button("⏹ Dừng xử lý", use_container_width=True)
+        
         frame_idx = 0
-        cumulative_vehicles = 0
+        max_vehicles = 0
+        total_violations = 0
 
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
+            
+            # Kiểm tra nút dừng
+            if stop_btn:
+                st.warning("⚠️ Đã dừng xử lý video theo yêu cầu!")
+                break
 
             frame_idx += 1
 
-            # Đếm xe trong frame hiện tại
-            v_count = count_vehicles_in_frame(frame, model_s1)
-            cumulative_vehicles = max(cumulative_vehicles, v_count)
-
-            # Gọi pipeline chính (is_video=True cho video)
-            processed = process_logic(frame, model_s1, model_s2, model_s3, WEB_OUTPUT_DIR, tracker, is_video=True)
+            # SKIP FRAME: Chỉ xử lý mỗi frame thứ N, các frame khác hiển thị gốc
+            if frame_idx % SKIP_FRAMES == 0:
+                # Gọi pipeline chính (is_video=True) — trả về (ảnh, stats)
+                processed, stats = process_logic(frame, model_s1, model_s2, model_s3, WEB_OUTPUT_DIR, tracker, is_video=True)
+                
+                # Cập nhật thống kê từ metadata
+                max_vehicles = max(max_vehicles, stats['total_vehicles'])
+                total_violations += stats['violations_this_frame']
+            else:
+                # Frame bỏ qua — hiển thị gốc, không chạy AI
+                processed = frame
 
             # Chuyển BGR → RGB
             processed_rgb = cv2.cvtColor(processed, cv2.COLOR_BGR2RGB)
@@ -416,15 +437,18 @@ if btn_process:
                 use_container_width=True,
             )
 
-            # Cập nhật metrics
-            st.session_state.total_vehicles = cumulative_vehicles
+            # 🔥 Cập nhật metric cards NGAY LẬP TỨC trên giao diện
+            st.session_state.total_vehicles = max_vehicles
+            st.session_state.total_violations = total_violations
+            metric_vehicles.metric(label="🏍️ Tổng số xe phát hiện", value=max_vehicles)
+            metric_violations.metric(label="🚨 Số xe vi phạm", value=total_violations)
+            metric_status.metric(label="📡 Trạng thái hệ thống", value="🎬 Đang quét…")
 
-            # Cập nhật bảng vi phạm liên tục
-            df_live = load_web_csv()
-            if not df_live.empty:
-                rows_now = len(df_live)
-                st.session_state.total_violations = rows_now - rows_before
-                table_area.dataframe(df_live, use_container_width=True, hide_index=True)
+            # Cập nhật bảng vi phạm mỗi N frame (giảm I/O đọa cứng)
+            if frame_idx % CSV_UPDATE_INTERVAL == 0:
+                df_live = load_web_csv()
+                if not df_live.empty:
+                    table_area.dataframe(df_live, use_container_width=True, hide_index=True)
 
             # Cập nhật thanh tiến trình
             pct = frame_idx / total_frames if total_frames > 0 else 0
@@ -436,19 +460,17 @@ if btn_process:
         cap.release()
         progress_bar.progress(1.0, text="✅ Hoàn tất xử lý video!")
 
-        # Cập nhật trạng thái cuối cùng
-        df_final = load_web_csv()
-        final_violations = (len(df_final) - rows_before) if not df_final.empty else 0
-        st.session_state.total_violations = final_violations
+        # Cập nhật trạng thái cuối cùng + bảng vi phạm
         st.session_state.system_status = "✅ Hoàn tất"
-
+        metric_status.metric(label="📡 Trạng thái hệ thống", value="✅ Hoàn tất")
+        df_final = load_web_csv()
         if not df_final.empty:
             table_area.dataframe(df_final, use_container_width=True, hide_index=True)
 
         # Dọn file tạm
         os.unlink(tmp_path)
 
-        st.success(f"✅ Đã xử lý xong video! **{frame_idx}** frames, **{final_violations}** vi phạm mới.")
+        st.success(f"✅ Đã xử lý xong video! **{frame_idx}** frames, **{total_violations}** vi phạm mới.")
 
     else:
         st.error("❌ Định dạng file không được hỗ trợ.")
