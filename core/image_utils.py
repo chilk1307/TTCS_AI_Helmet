@@ -50,6 +50,10 @@ def compute_skew(src_img):
 
 # HÀM TỔNG HỢP GỌI TỪ MAIN: Vừa chống lóa, vừa nắn thẳng
 def preprocess_and_deskew(src_img):
+    # Guard: ảnh quá nhỏ sẽ crash medianBlur/Canny
+    h, w = src_img.shape[:2]
+    if h < 10 or w < 10:
+        return src_img
     enhanced_img = changeContrast(src_img)
     angle = compute_skew(enhanced_img)
     if angle != 0.0:
