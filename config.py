@@ -39,6 +39,12 @@ HELMET_CONF_MARGIN = 0.15
 SKIP_FRAMES = 2             # Chỉ chạy Stage 2+3 mỗi N frame (Stage 1 track luôn chạy)
 CSV_UPDATE_INTERVAL = 15    # Cập nhật bảng CSV trên UI mỗi N frame
 
+# ★ Vùng Nhận Diện (Detection Zone) - Chỉ áp dụng cho video
+# Xe chỉ được phân tích mũ/biển số khi tâm xe nằm trong vùng này (30% -> 80% chiều cao video)
+# Giúp loại bỏ xe quá xa (mờ, khó đọc) và xe chuẩn bị ra khỏi màn hình
+ZONE_Y_MIN_RATIO = 0.30
+ZONE_Y_MAX_RATIO = 0.80
+
 # ── Deferred Logging (Video) ──────────────────────────────
 # Số frame không thấy ID → coi là đã rời khung hình → ghi biên bản
 LOST_ID_THRESHOLD = 30

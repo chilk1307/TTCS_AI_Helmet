@@ -15,6 +15,7 @@ from config import (
     STAGE1_IMGSZ, MIN_PLATE_WIDTH, MIN_PLATE_HEIGHT,
     MIN_CROP_SIZE, HELMET_REGION_RATIO, HELMET_CONF_MARGIN,
     PLATE_PAD_RATIO, SKIP_FRAMES,
+    ZONE_Y_MIN_RATIO, ZONE_Y_MAX_RATIO,
 )
 
 # Tắt cảnh báo để Terminal luôn sạch sẽ, chuyên nghiệp
@@ -146,6 +147,21 @@ def process_logic(img, model_s1, model_s2, model_s3, output_dir, tracker, is_vid
     stats = {'total_vehicles': 0, 'violations_this_frame': 0}
 
     try:
+        img_h, img_w = img.shape[:2]
+
+        # ★ Vẽ Vùng Nhận Diện (Detection Zone) cho video
+        if is_video:
+            zone_y_min = int(img_h * ZONE_Y_MIN_RATIO)
+            zone_y_max = int(img_h * ZONE_Y_MAX_RATIO)
+            # Vẽ 2 vạch ngang nổi bật hơn (độ dày 3, màu Đỏ Cam) để dễ demo
+            zone_color = (0, 140, 255) # Cam đậm / Đỏ cam BGR
+            cv2.line(img, (0, zone_y_min), (img_w, zone_y_min), zone_color, 3, cv2.LINE_AA)
+            cv2.line(img, (0, zone_y_max), (img_w, zone_y_max), zone_color, 3, cv2.LINE_AA)
+            cv2.putText(img, "DETECTION ZONE - BAT DAU QUET", (10, zone_y_min - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, zone_color, 2, cv2.LINE_AA)
+            cv2.putText(img, "DETECTION ZONE - KET THUC", (10, zone_y_max + 25), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, zone_color, 2, cv2.LINE_AA)
+
         # 1. QUÉT XE MÁY (Stage 1)
         if is_video:
             res_s1 = model_s1.track(img, persist=True, conf=STAGE1_CONF, imgsz=STAGE1_IMGSZ, verbose=False)[0]
@@ -165,30 +181,42 @@ def process_logic(img, model_s1, model_s2, model_s3, output_dir, tracker, is_vid
             try:
                 x1, y1, x2, y2 = map(int, box1.xyxy[0])
 
-                # ★ Filter crop quá nhỏ — không đủ chi tiết cho Stage 2
-                crop_w, crop_h = x2 - x1, y2 - y1
-                if min(crop_w, crop_h) < MIN_CROP_SIZE:
-                    continue
-
                 # Cấp ID
                 if is_video and box1.id is not None:
                     track_id = int(box1.id[0])
                 else:
                     track_id = index + 1
 
+                # Đánh dấu ID vẫn còn trong khung hình (cho video tracker)
+                if is_video:
+                    tracker.mark_seen(track_id, frame_idx)
+
                 # Vẽ khung xe lên ảnh HIỂN THỊ (không phải ảnh sạch)
                 cv2.rectangle(img, (x1, y1), (x2, y2), COLORS['motorcyclist'], 2)
                 cv2.putText(img, f"ID: {track_id}", (x1, y1-10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
 
+                # ★ KIỂM TRA VÙNG NHẬN DIỆN (Chỉ áp dụng cho Video)
+                if is_video:
+                    veh_cy = (y1 + y2) / 2
+                    if veh_cy < zone_y_min or veh_cy > zone_y_max:
+                        # Nằm ngoài vùng → Chỉ tracking, bỏ qua Stage 2+3
+                        continue
+                    
+                    # Nếu xe đã được ghi biên bản → Không cần tốn công đọc lại
+                    if tracker.is_logged(track_id):
+                        cv2.putText(img, "LOGGED", (x1, y1 - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                        continue
+
+                # ★ Filter crop quá nhỏ — không đủ chi tiết cho Stage 2
+                crop_w, crop_h = x2 - x1, y2 - y1
+                if min(crop_w, crop_h) < MIN_CROP_SIZE:
+                    continue
+
                 # ★ Crop từ ảnh SẠCH (không có bounding box)
                 crop_img = img_clean[y1:y2, x1:x2]
                 if crop_img.size == 0:
                     continue
-
-                # Đánh dấu ID vẫn còn trong khung hình (cho video tracker)
-                if is_video:
-                    tracker.mark_seen(track_id, frame_idx)
 
                 # 3. NHẬN DIỆN MŨ & BIỂN SỐ (Stage 2)
                 res_s2 = model_s2.predict(crop_img, conf=STAGE2_CONF, verbose=False)[0]
@@ -326,12 +354,20 @@ def main():
 
         elif filename.lower().endswith(('.mp4', '.avi', '.mov')):
             cap = cv2.VideoCapture(file_path)
-            fps = int(cap.get(cv2.CAP_PROP_FPS))
+            orig_fps = int(cap.get(cv2.CAP_PROP_FPS))
+            
+            # ★ Giảm FPS output để video chiếu chậm lại (tốt cho việc demo, nhìn rõ vi phạm)
+            slow_fps = max(15, orig_fps // 2)
+            if orig_fps >= 60:
+                slow_fps = 20  # Nếu 60fps thì đưa về 20fps (chậm 3 lần) để dễ nhìn
+            elif orig_fps == 30:
+                slow_fps = 15  # Nếu 30fps thì đưa về 15fps (chậm 2 lần)
+                
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            out = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*'mp4v'), fps,
+            out = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*'mp4v'), slow_fps,
                                   (int(cap.get(3)), int(cap.get(4))))
 
-            print(f"🎬 Đang quét Video động: {filename} ({total_frames} frames, {fps}fps)...")
+            print(f"🎬 Đang quét Video động: {filename} ({total_frames} frames, gốc {orig_fps}fps -> demo {slow_fps}fps)...")
             tracker = ViolationTracker()
             frame_idx = 0
 
