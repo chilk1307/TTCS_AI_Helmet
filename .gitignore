@@ -1,34 +1,18 @@
-# venv
+
 venv/
 .venv/
-
-# python cache
 __pycache__/
 *.pyc
-
-# vscode / IDE
 .vscode/
 .idea/
-
-# train results
 runs/
-
-# model weights (tải riêng, không push lên Git)
 *.pt
 *.mp4
 *.csv
-# env
 .env
-
-
 test_inputs/
-# Kết quả output (không push lên Git)
 outputs/
 test_outputs/
-
-# OS generated
 .DS_Store
 Thumbs.db
-
-# Jupyter
 .ipynb_checkpoints/
