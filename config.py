@@ -47,7 +47,7 @@ LOST_ID_THRESHOLD = 30
 OCR_MIN_CHARS = 5           # Tối thiểu ký tự để coi là biển số hợp lệ
 OCR_UPSCALE_FACTOR = 2      # Phóng to biển số trước khi OCR
 PLATE_PAD_RATIO = 0.10      # Padding 10% mỗi cạnh khi crop biển số (tránh cắt sát ký tự biên)
-OCR_MULTI_SCALES = [2, 3]   # Thử OCR ở nhiều scale, chọn kết quả tốt nhất
+OCR_MULTI_SCALES = [2]       # Scale phóng to cho OCR (thêm scale sẽ chậm hơn nhưng chính xác hơn)
 
 # ── Màu sắc (BGR cho OpenCV) ─────────────────────────────
 COLORS = {

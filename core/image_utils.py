@@ -69,9 +69,11 @@ def denoise_if_needed(img):
         mean_brightness = np.mean(gray)
 
         if mean_brightness < 80:
-            # fastNlMeansDenoisingColored(src, dst, h, hForColorComponents, templateWindowSize, searchWindowSize)
-            # Dùng positional args vì OpenCV 4.13+ không hỗ trợ keyword cho một số tham số
-            return cv2.fastNlMeansDenoisingColored(img, None, 6, 6, 7, 21)
+            # bilateralFilter: nhanh hơn fastNlMeans ~60 lần cho ảnh nhỏ
+            # d=7: đường kính pixel lân cận
+            # sigmaColor=50: lọc màu (giữ cạnh)
+            # sigmaSpace=50: lọc không gian
+            return cv2.bilateralFilter(img, 7, 50, 50)
     except Exception:
         pass  # Nếu denoise lỗi → trả về ảnh gốc, không crash pipeline
 

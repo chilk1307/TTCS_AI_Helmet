@@ -14,7 +14,7 @@ from config import (
     COLORS, STAGE1_CONF, STAGE2_CONF, NOHELMET_MIN_CONF,
     STAGE1_IMGSZ, MIN_PLATE_WIDTH, MIN_PLATE_HEIGHT,
     MIN_CROP_SIZE, HELMET_REGION_RATIO, HELMET_CONF_MARGIN,
-    PLATE_PAD_RATIO,
+    PLATE_PAD_RATIO, SKIP_FRAMES,
 )
 
 # Tắt cảnh báo để Terminal luôn sạch sẽ, chuyên nghiệp
@@ -327,10 +327,11 @@ def main():
         elif filename.lower().endswith(('.mp4', '.avi', '.mov')):
             cap = cv2.VideoCapture(file_path)
             fps = int(cap.get(cv2.CAP_PROP_FPS))
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             out = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*'mp4v'), fps,
                                   (int(cap.get(3)), int(cap.get(4))))
 
-            print(f"🎬 Đang quét Video động: {filename}...")
+            print(f"🎬 Đang quét Video động: {filename} ({total_frames} frames, {fps}fps)...")
             tracker = ViolationTracker()
             frame_idx = 0
 
@@ -339,9 +340,28 @@ def main():
                 if not ret:
                     break
                 frame_idx += 1
-                frame, _ = process_logic(frame, model_s1, model_s2, model_s3,
-                                         output_dir, tracker, is_video=True, frame_idx=frame_idx)
+
+                # ★ SKIP_FRAMES: Chỉ chạy Stage 2+3 mỗi N frame
+                #   Frame khác: chỉ chạy Stage 1 track (nhẹ) để giữ tracking ID
+                run_full = (frame_idx % SKIP_FRAMES == 0)
+
+                if run_full:
+                    frame, _ = process_logic(frame, model_s1, model_s2, model_s3,
+                                             output_dir, tracker, is_video=True, frame_idx=frame_idx)
+                else:
+                    # Chỉ tracking nhẹ (Stage 1 only)
+                    res_s1 = model_s1.track(frame, persist=True, conf=STAGE1_CONF, imgsz=STAGE1_IMGSZ, verbose=False)[0]
+                    if res_s1.boxes is not None:
+                        for box1 in res_s1.boxes:
+                            if box1.id is not None:
+                                tracker.mark_seen(int(box1.id[0]), frame_idx)
+
                 out.write(frame)
+
+                # In tiến trình mỗi 50 frame
+                if frame_idx % 50 == 0:
+                    pct = frame_idx / total_frames * 100 if total_frames > 0 else 0
+                    print(f"   ⏳ Frame {frame_idx}/{total_frames} ({pct:.0f}%)")
 
             # ★ Ghi biên bản cho các xe còn lại khi video kết thúc
             tracker.finalize(output_dir)
