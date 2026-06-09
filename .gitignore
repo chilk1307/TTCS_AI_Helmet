@@ -15,10 +15,13 @@ runs/
 
 # model weights (tải riêng, không push lên Git)
 *.pt
-
+*.mp4
+*.csv
 # env
 .env
 
+
+test_inputs/
 # Kết quả output (không push lên Git)
 outputs/
 test_outputs/
