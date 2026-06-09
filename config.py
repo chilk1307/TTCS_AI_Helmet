@@ -22,6 +22,19 @@ STAGE3_IMGSZ = 640          # Resize biển số cho Stage 3 (tăng từ 320)
 MIN_PLATE_WIDTH = 30
 MIN_PLATE_HEIGHT = 15
 
+# ── Kích thước crop tối thiểu (pixel) ────────────────────
+# Crop xe máy < MIN_CROP_SIZE pixel (cạnh nhỏ nhất) → bỏ qua, không chạy Stage 2
+MIN_CROP_SIZE = 50
+
+# ── Helmet Detection Logic ───────────────────────────────
+# Chỉ xét detection helmet/nohelmet nằm ở phần TRÊN crop (vùng đầu)
+# Ví dụ: 0.55 = chỉ xét detection có center_y < 55% chiều cao crop
+HELMET_REGION_RATIO = 0.55
+
+# Khi có CẢ helmet VÀ nohelmet ở cùng vùng → nếu helmet.conf - nohelmet.conf > MARGIN
+# → tin helmet (tránh tóc dài bị nhận nhầm thành nohelmet)
+HELMET_CONF_MARGIN = 0.15
+
 # ── Video Processing ──────────────────────────────────────
 SKIP_FRAMES = 2             # Chỉ chạy Stage 2+3 mỗi N frame (Stage 1 track luôn chạy)
 CSV_UPDATE_INTERVAL = 15    # Cập nhật bảng CSV trên UI mỗi N frame
@@ -33,6 +46,8 @@ LOST_ID_THRESHOLD = 30
 # ── OCR ──────────────────────────────────────────────────
 OCR_MIN_CHARS = 5           # Tối thiểu ký tự để coi là biển số hợp lệ
 OCR_UPSCALE_FACTOR = 2      # Phóng to biển số trước khi OCR
+PLATE_PAD_RATIO = 0.10      # Padding 10% mỗi cạnh khi crop biển số (tránh cắt sát ký tự biên)
+OCR_MULTI_SCALES = [2, 3]   # Thử OCR ở nhiều scale, chọn kết quả tốt nhất
 
 # ── Màu sắc (BGR cho OpenCV) ─────────────────────────────
 COLORS = {

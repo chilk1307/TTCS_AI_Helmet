@@ -13,38 +13,145 @@ from core.tracking_engine import ViolationTracker
 from config import (
     COLORS, STAGE1_CONF, STAGE2_CONF, NOHELMET_MIN_CONF,
     STAGE1_IMGSZ, MIN_PLATE_WIDTH, MIN_PLATE_HEIGHT,
+    MIN_CROP_SIZE, HELMET_REGION_RATIO, HELMET_CONF_MARGIN,
+    PLATE_PAD_RATIO,
 )
 
 # Tắt cảnh báo để Terminal luôn sạch sẽ, chuyên nghiệp
 warnings.filterwarnings("ignore")
 
 
-# ==========================================
+# ══════════════════════════════════════════════════════════
+# HELPER: PHÁN QUYẾT MŨ BẢO HIỂM THÔNG MINH
+# ══════════════════════════════════════════════════════════
+
+def _judge_helmet_violation(detections, crop_h):
+    """
+    Phán quyết vi phạm mũ bảo hiểm dựa trên vị trí + confidence.
+
+    Logic:
+      1. Chỉ xét detection có center_y < HELMET_REGION_RATIO * crop_h (vùng đầu)
+      2. Thu thập TẤT CẢ helmet/nohelmet detections ở vùng đầu
+      3. Nếu có CẢ helmet và nohelmet ở cùng vùng:
+         - Nếu max(helmet.conf) - max(nohelmet.conf) > HELMET_CONF_MARGIN → tin helmet (AN TOÀN)
+         - Ngược lại → VI PHẠM (cẩn thận hơn: vẫn phạt khi không chắc chắn)
+      4. Nếu chỉ có nohelmet (không có helmet nào) → VI PHẠM chắc chắn
+      5. Nếu chỉ có helmet (không có nohelmet) → AN TOÀN
+      6. Nếu KHÔNG detect được gì ở vùng đầu → KHÔNG phán quyết (trả về False)
+         Lý do: góc khuất, ảnh mờ → không nên đoán bừa
+
+    Trường hợp đặc biệt — NHIỀU NGƯỜI trên 1 xe:
+      - Nếu có >= 1 nohelmet pass filter → VI PHẠM (dù tài xế có đội mũ)
+      - Vì luật VN: TẤT CẢ người trên xe phải đội mũ
+
+    Args:
+        detections: list of dict {'label', 'conf', 'cy'} — các detection helmet/nohelmet
+        crop_h: chiều cao crop xe máy (pixel)
+
+    Returns:
+        bool — True nếu VI PHẠM, False nếu AN TOÀN
+    """
+    head_region_limit = crop_h * HELMET_REGION_RATIO
+
+    # Lọc detection ở vùng đầu
+    helmets_in_head = []
+    nohelmet_in_head = []
+
+    for d in detections:
+        if d['cy'] > head_region_limit:
+            continue  # Bỏ qua detection ở phần thân/chân → không phải đầu
+
+        if d['label'] == 'helmet':
+            helmets_in_head.append(d)
+        elif d['label'] == 'nohelmet':
+            nohelmet_in_head.append(d)
+
+    # Case 1: Không detect được gì ở vùng đầu → không đủ bằng chứng
+    if not helmets_in_head and not nohelmet_in_head:
+        return False
+
+    # Case 2: Chỉ có helmet → AN TOÀN
+    if helmets_in_head and not nohelmet_in_head:
+        return False
+
+    # Case 3: Chỉ có nohelmet → VI PHẠM chắc chắn
+    if nohelmet_in_head and not helmets_in_head:
+        return True
+
+    # Case 4: CÓ CẢ HAI → cần so sánh confidence
+    # Trường hợp nhiều người: nếu có nhiều nohelmet → khả năng cao có người không đội mũ
+    max_helmet_conf = max(d['conf'] for d in helmets_in_head)
+    max_nohelmet_conf = max(d['conf'] for d in nohelmet_in_head)
+
+    # ★ Nếu có NHIỀU nohelmet detections (>=2) → gần như chắc chắn vi phạm
+    #   (nhiều người không đội mũ, hoặc model rất tự tin)
+    if len(nohelmet_in_head) >= 2:
+        return True
+
+    # ★ So sánh conf: nếu helmet conf VƯỢT TRỘI hơn nohelmet → tin helmet
+    #   Điều này giải quyết trường hợp tóc dài bị nhận nhầm thành nohelmet
+    #   (nohelmet conf thường ~0.50-0.60, trong khi helmet conf ~0.70-0.85)
+    if max_helmet_conf - max_nohelmet_conf > HELMET_CONF_MARGIN:
+        return False  # Helmet đáng tin hơn → AN TOÀN
+
+    # Mặc định: khi không chắc chắn → VI PHẠM (cẩn thận hơn)
+    return True
+
+
+# ══════════════════════════════════════════════════════════
+# HELPER: CROP BIỂN SỐ CÓ PADDING
+# ══════════════════════════════════════════════════════════
+
+def _crop_plate_with_padding(source_img, px1, py1, px2, py2):
+    """
+    Crop biển số với padding mở rộng viền.
+    Tránh cắt sát ký tự đầu/cuối → YOLO OCR đọc đầy đủ hơn.
+    """
+    h, w = source_img.shape[:2]
+    pw, ph = px2 - px1, py2 - py1
+
+    # Tính padding
+    pad_x = int(pw * PLATE_PAD_RATIO)
+    pad_y = int(ph * PLATE_PAD_RATIO)
+
+    # Mở rộng box nhưng không vượt quá biên ảnh
+    new_x1 = max(0, px1 - pad_x)
+    new_y1 = max(0, py1 - pad_y)
+    new_x2 = min(w, px2 + pad_x)
+    new_y2 = min(h, py2 + pad_y)
+
+    return source_img[new_y1:new_y2, new_x1:new_x2]
+
+
+# ══════════════════════════════════════════════════════════
 # TRÁI TIM CỦA HỆ THỐNG: LUỒNG XỬ LÝ LOGIC
-# ==========================================
+# ══════════════════════════════════════════════════════════
+
 def process_logic(img, model_s1, model_s2, model_s3, output_dir, tracker, is_video=False, frame_idx=0):
     """
     Luồng xử lý chính: Detect xe → Detect mũ/biển số → OCR → Ghi biên bản.
-    
-    Cải tiến so với v1:
+
+    Cải tiến v2 (so với v1):
       - Clone ảnh trước khi vẽ → crop sạch cho Stage 2
       - Lấy biển số diện tích lớn nhất
-      - Confidence riêng cho nohelmet (chống nhận nhầm tóc)
+      - ★ Logic helmet THÔNG MINH: kiểm tra vùng đầu + confidence weighting
+      - ★ Plate padding: mở rộng crop biển số tránh cắt sát ký tự
+      - ★ Filter crop nhỏ: bỏ qua crop < MIN_CROP_SIZE pixel
       - Video: tích lũy bằng chứng tốt nhất, ghi biên bản khi xe rời khung hình
-      - Ảnh: ghi biên bản ngay, kể cả khi biển số KHONG_RO
+      - Ảnh: ghi biên bản ngay
       - Error handling: 1 xe lỗi không làm sập toàn bộ
-    
+
     Trả về: (img_đã_vẽ, stats_dict)
     """
     stats = {'total_vehicles': 0, 'violations_this_frame': 0}
-    
+
     try:
         # 1. QUÉT XE MÁY (Stage 1)
         if is_video:
             res_s1 = model_s1.track(img, persist=True, conf=STAGE1_CONF, imgsz=STAGE1_IMGSZ, verbose=False)[0]
         else:
             res_s1 = model_s1.predict(img, conf=STAGE1_CONF, imgsz=STAGE1_IMGSZ, verbose=False)[0]
-        
+
         if res_s1.boxes is None or len(res_s1.boxes) == 0:
             return img, stats
 
@@ -57,18 +164,23 @@ def process_logic(img, model_s1, model_s2, model_s3, output_dir, tracker, is_vid
         for index, box1 in enumerate(res_s1.boxes):
             try:
                 x1, y1, x2, y2 = map(int, box1.xyxy[0])
-                
+
+                # ★ Filter crop quá nhỏ — không đủ chi tiết cho Stage 2
+                crop_w, crop_h = x2 - x1, y2 - y1
+                if min(crop_w, crop_h) < MIN_CROP_SIZE:
+                    continue
+
                 # Cấp ID
                 if is_video and box1.id is not None:
-                    track_id = int(box1.id[0]) 
+                    track_id = int(box1.id[0])
                 else:
-                    track_id = index + 1 
+                    track_id = index + 1
 
                 # Vẽ khung xe lên ảnh HIỂN THỊ (không phải ảnh sạch)
                 cv2.rectangle(img, (x1, y1), (x2, y2), COLORS['motorcyclist'], 2)
                 cv2.putText(img, f"ID: {track_id}", (x1, y1-10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-                
+
                 # ★ Crop từ ảnh SẠCH (không có bounding box)
                 crop_img = img_clean[y1:y2, x1:x2]
                 if crop_img.size == 0:
@@ -77,28 +189,36 @@ def process_logic(img, model_s1, model_s2, model_s3, output_dir, tracker, is_vid
                 # Đánh dấu ID vẫn còn trong khung hình (cho video tracker)
                 if is_video:
                     tracker.mark_seen(track_id, frame_idx)
-                    
+
                 # 3. NHẬN DIỆN MŨ & BIỂN SỐ (Stage 2)
                 res_s2 = model_s2.predict(crop_img, conf=STAGE2_CONF, verbose=False)[0]
-                
-                has_nohelmet = False
+
+                # ★ Thu thập TẤT CẢ detections trước khi phán quyết
+                helmet_detections = []  # {'label', 'conf', 'cy'}
                 plate_box = None
                 plate_area = 0
-                
+
                 for box2 in res_s2.boxes:
                     cx1, cy1, cx2, cy2 = map(int, box2.xyxy[0])
                     cls_id = int(box2.cls[0])
                     label = model_s2.names[cls_id]
                     conf = float(box2.conf[0])
-                    
-                    # ★ Nohelmet dưới ngưỡng → BỎ QUA HOÀN TOÀN (không vẽ, không đếm)
-                    #   Tránh vẽ khung đỏ nhưng lại nói "AN TOÀN" → gây nhầm lẫn
+
+                    # Center Y trong crop (để kiểm tra vùng đầu)
+                    cy_center = (cy1 + cy2) / 2
+
+                    # ★ Nohelmet dưới ngưỡng MIN → BỎ QUA HOÀN TOÀN
                     if label == 'nohelmet' and conf < NOHELMET_MIN_CONF:
                         continue
-                    
-                    if label == 'nohelmet':
-                        has_nohelmet = True
-                    
+
+                    # Thu thập helmet/nohelmet detections cho logic phán quyết
+                    if label in ('helmet', 'nohelmet'):
+                        helmet_detections.append({
+                            'label': label,
+                            'conf': conf,
+                            'cy': cy_center,
+                        })
+
                     # Lấy biển số DIỆN TÍCH LỚN NHẤT
                     if label == 'licenseplate':
                         area = (cx2 - cx1) * (cy2 - cy1)
@@ -115,30 +235,29 @@ def process_logic(img, model_s1, model_s2, model_s3, output_dir, tracker, is_vid
                     cv2.putText(img, label_text, (fx1, fy1 - 5),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
 
-                # ★ LOGIC PHÁN QUYẾT VI PHẠM:
-                # CÓ nohelmet = VI PHẠM (dù tài xế có đội mũ, khách không đội vẫn phạt)
-                # Confidence đã lọc bằng NOHELMET_MIN_CONF (0.60) để tránh nhận nhầm tóc
-                violation_detected = has_nohelmet
+                # ★ LOGIC PHÁN QUYẾT VI PHẠM — THÔNG MINH
+                violation_detected = _judge_helmet_violation(helmet_detections, crop_h)
 
                 # 4. ĐỌC BIỂN SỐ (Stage 3)
                 final_plate_text = ""
                 if plate_box is not None:
-                    px1, py1, px2, py2 = plate_box
-                    pw, ph = px2 - px1, py2 - py1
-                    
+                    px1, py1_p, px2, py2_p = plate_box
+                    pw, ph = px2 - px1, py2_p - py1_p
+
                     if pw >= MIN_PLATE_WIDTH and ph >= MIN_PLATE_HEIGHT:
-                        plate_crop = crop_img[py1:py2, px1:px2]
+                        # ★ Crop biển số CÓ PADDING — tránh cắt sát ký tự biên
+                        plate_crop = _crop_plate_with_padding(
+                            crop_img, px1, py1_p, px2, py2_p
+                        )
                         if plate_crop.size > 0:
                             clean_plate = preprocess_and_deskew(plate_crop)
                             final_plate_text = read_plate_yolo26(clean_plate, model_s3)
 
                 # 5. GHI BIÊN BẢN & HIỂN THỊ
-                # ★ CHỈ ghi vi phạm khi ĐỌC ĐƯỢC biển số (không ghi KHONG_RO)
-                #   Lý do: Không có biển số → không thể phạt nguội → ghi vô ích
                 if violation_detected and final_plate_text:
                     cv2.putText(img, f"PHAT NGUOI: {final_plate_text}", (x1, y1 - 30),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.8, COLORS['nohelmet'], 2)
-                    
+
                     if is_video:
                         tracker.update_violation(
                             track_id, final_plate_text, crop_img,
@@ -148,7 +267,7 @@ def process_logic(img, model_s1, model_s2, model_s3, output_dir, tracker, is_vid
                         log_violation(final_plate_text, crop_img, output_dir)
                         print(f"🚨 ĐÃ LẬP BIÊN BẢN (ID {track_id}): {final_plate_text}")
                         stats['violations_this_frame'] += 1
-                        
+
                 elif final_plate_text:
                     # Người chấp hành tốt
                     cv2.putText(img, f"AN TOAN: {final_plate_text}", (x1, y1 - 30),
@@ -175,16 +294,16 @@ def process_logic(img, model_s1, model_s2, model_s3, output_dir, tracker, is_vid
 # ==========================================
 def main():
     from config import MODEL_STAGE1, MODEL_STAGE2, MODEL_STAGE3
-    
+
     print("🚀 Đang khởi động Hệ thống AI Giao thông CHUYÊN NGHIỆP...")
-    
+
     model_s1 = YOLO(MODEL_STAGE1)
     model_s2 = YOLO(MODEL_STAGE2)
     model_s3 = YOLO(MODEL_STAGE3)
 
-    input_dir = 'test_inputs/'      
-    output_dir = 'test_outputs/' 
-    
+    input_dir = 'test_inputs/'
+    output_dir = 'test_outputs/'
+
     os.makedirs(os.path.join(output_dir, 'Bang_Chung'), exist_ok=True)
 
     files = os.listdir(input_dir)
@@ -204,17 +323,17 @@ def main():
                 img, _ = process_logic(img, model_s1, model_s2, model_s3, output_dir, tracker, is_video=False)
                 cv2.imwrite(out_path, img)
                 print(f"✅ Đã xử lý xong Ảnh: {filename}")
-        
+
         elif filename.lower().endswith(('.mp4', '.avi', '.mov')):
             cap = cv2.VideoCapture(file_path)
             fps = int(cap.get(cv2.CAP_PROP_FPS))
             out = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*'mp4v'), fps,
                                   (int(cap.get(3)), int(cap.get(4))))
-            
+
             print(f"🎬 Đang quét Video động: {filename}...")
             tracker = ViolationTracker()
             frame_idx = 0
-            
+
             while True:
                 ret, frame = cap.read()
                 if not ret:
@@ -223,10 +342,10 @@ def main():
                 frame, _ = process_logic(frame, model_s1, model_s2, model_s3,
                                          output_dir, tracker, is_video=True, frame_idx=frame_idx)
                 out.write(frame)
-                
+
             # ★ Ghi biên bản cho các xe còn lại khi video kết thúc
             tracker.finalize(output_dir)
-            
+
             cap.release()
             out.release()
             print(f"✅ Đã xử lý xong Video: {filename}")
