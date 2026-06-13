@@ -2,7 +2,7 @@ import numpy as np
 import math
 import cv2
 
-from config import PLATE_PAD_RATIO
+from src.config import PLATE_PAD_RATIO
 
 
 # ══════════════════════════════════════════════════════════

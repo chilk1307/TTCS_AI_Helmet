@@ -1,5 +1,5 @@
-from config import LOST_ID_THRESHOLD
-from core.logger import log_violation
+from src.config import LOST_ID_THRESHOLD
+from src.engine.core.logger import log_violation
 
 
 class ViolationTracker:

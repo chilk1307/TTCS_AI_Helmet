@@ -4,13 +4,13 @@ import warnings
 from ultralytics import YOLO
 
 # CÁC MẢNH GHÉP TỪ THƯ MỤC CORE
-from core.logger import log_violation
-from core.image_utils import preprocess_and_deskew
-from core.ocr_engine import read_plate_yolo26
-from core.tracking_engine import ViolationTracker
+from src.engine.core.logger import log_violation
+from src.engine.core.image_utils import preprocess_and_deskew
+from src.engine.core.ocr_engine import read_plate_yolo26
+from src.engine.core.tracking_engine import ViolationTracker
 
 # CẤU HÌNH TẬP TRUNG
-from config import (
+from src.config import (
     COLORS, STAGE1_CONF, STAGE2_CONF, NOHELMET_MIN_CONF,
     STAGE1_IMGSZ, MIN_PLATE_WIDTH, MIN_PLATE_HEIGHT,
     MIN_CROP_SIZE, HELMET_REGION_RATIO, HELMET_CONF_MARGIN,
@@ -321,7 +321,7 @@ def process_logic(img, model_s1, model_s2, model_s3, output_dir, tracker, is_vid
 # HÀM CHẠY CHÍNH TỔNG HỢP (MAIN)
 # ==========================================
 def main():
-    from config import MODEL_STAGE1, MODEL_STAGE2, MODEL_STAGE3
+    from src.config import MODEL_STAGE1, MODEL_STAGE2, MODEL_STAGE3
 
     print("🚀 Đang khởi động Hệ thống AI Giao thông CHUYÊN NGHIỆP...")
 
@@ -329,14 +329,14 @@ def main():
     model_s2 = YOLO(MODEL_STAGE2)
     model_s3 = YOLO(MODEL_STAGE3)
 
-    input_dir = 'test_inputs/'
-    output_dir = 'test_outputs/'
+    input_dir = 'data/inputs/'
+    output_dir = 'data/outputs/cli_results/'
 
-    os.makedirs(os.path.join(output_dir, 'Bang_Chung'), exist_ok=True)
+    os.makedirs(os.path.join(output_dir, 'images'), exist_ok=True)
 
     files = os.listdir(input_dir)
     if not files:
-        print("⚠️ Thư mục trống! Vui lòng cho ảnh hoặc video vào test_inputs/")
+        print("⚠️ Thư mục trống! Vui lòng cho ảnh hoặc video vào data/inputs/")
         return
 
     for filename in files:

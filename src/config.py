@@ -4,9 +4,9 @@ Chỉ cần sửa ở đây, không cần lục tìm khắp project.
 """
 
 # ── Đường dẫn Model ──────────────────────────────────────
-MODEL_STAGE1 = "models/stage1.pt"
-MODEL_STAGE2 = "models/stage2.pt"
-MODEL_STAGE3 = "models/stage3.pt"
+MODEL_STAGE1 = "data/models/stage1.pt"
+MODEL_STAGE2 = "data/models/stage2.pt"
+MODEL_STAGE3 = "data/models/stage3.pt"
 
 # ── Confidence Threshold ─────────────────────────────────
 STAGE1_CONF = 0.45          # Phát hiện xe máy

@@ -1,6 +1,6 @@
 import re
 import cv2
-from config import STAGE3_CONF, STAGE3_IMGSZ, OCR_MIN_CHARS, OCR_MULTI_SCALES
+from src.config import STAGE3_CONF, STAGE3_IMGSZ, OCR_MIN_CHARS, OCR_MULTI_SCALES
 
 # ══════════════════════════════════════════════════════════
 # BẢNG SỬA LỖI KÝ TỰ OCR THEO VỊ TRÍ

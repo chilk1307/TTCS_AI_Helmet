@@ -20,15 +20,15 @@ def log_violation(plate_text, evidence_img, output_dir):
         plate_text = "KHONG_RO"
 
     # Phân biệt đường dẫn theo nguồn gọi (Web hay Terminal)
-    is_web = os.path.isdir(os.path.join(output_dir, 'images'))
+    is_web = 'web_results' in output_dir or 'outputs' in output_dir
     
     if is_web:
-        # Web UI: Ảnh → outputs/images/  |  CSV → outputs/reports/
+        # Web UI: Ảnh → data/outputs/web_results/images/ | CSV → data/outputs/web_results/reports/
         img_dir = os.path.join(output_dir, 'images')
         csv_dir = os.path.join(output_dir, 'reports')
     else:
-        # Terminal: Ảnh → test_outputs/Bang_Chung/  |  CSV → test_outputs/
-        img_dir = os.path.join(output_dir, 'Bang_Chung')
+        # Terminal: Ảnh → data/outputs/cli_results/images/ | CSV → data/outputs/cli_results/
+        img_dir = os.path.join(output_dir, 'images')
         csv_dir = output_dir
     
     # Đảm bảo thư mục tồn tại
@@ -45,7 +45,7 @@ def log_violation(plate_text, evidence_img, output_dir):
     
     # Kiểm tra xem file đã tồn tại chưa để tạo Tiêu đề (Header)
     file_exists = os.path.isfile(log_file)
-    with open(log_file, mode='a', newline='', encoding='utf-8') as f:
+    with open(log_file, mode='a', newline='', encoding='utf-8-sig') as f:
         writer = csv.writer(f)
         if not file_exists:
             writer.writerow(['Thời gian vi phạm', 'Biển số xe', 'Tên file Bằng chứng', 'Lỗi'])

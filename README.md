@@ -33,19 +33,35 @@ Hệ thống AI sử dụng **3 model YOLO** theo pipeline 3 giai đoạn để 
 
 ```
 TTCS_AI_Helmet/
-├── app.py                 # Giao diện Web (Streamlit)
-├── main_pipeline.py       # Pipeline xử lý chính + CLI
-├── core/
-│   ├── image_utils.py     # Tiền xử lý ảnh (CLAHE, deskew)
-│   ├── logger.py          # Ghi CSV + lưu ảnh bằng chứng
-│   ├── ocr_engine.py      # Đọc ký tự biển số (YOLO OCR)
-│   └── tracking_engine.py # Chống lặp ID video
-├── models/                # Chứa 3 file .pt (tải riêng)
-├── test_inputs/           # Ảnh/video đầu vào test
-├── test_outputs/          # Kết quả từ CLI (terminal)
-└── outputs/               # Kết quả từ Web UI
-    ├── reports/            # CSV danh sách vi phạm
-    └── images/             # Ảnh bằng chứng vi phạm
+├── src/                          # 💻 Toàn bộ Source Code
+│   ├── api/                      # Tầng API & Server
+│   │   ├── __init__.py
+│   │   └── server.py             # Flask API router
+│   ├── engine/                   # Tầng AI & Xử lý 
+│   │   ├── __init__.py
+│   │   ├── pipeline.py           # Logic pipeline chính
+│   │   └── core/                 # Các module thuật toán
+│   │       ├── __init__.py
+│   │       ├── image_utils.py
+│   │       ├── ocr_engine.py
+│   │       ├── tracking_engine.py
+│   │       └── logger.py
+│   ├── frontend/                 # Tầng Giao diện (HTML5, JS)
+│   │   ├── index.html
+│   │   └── app.js
+│   └── config.py                 # Cấu hình tham số chung
+│
+├── data/                         # 📁 Quản lý Dữ liệu in/out
+│   ├── models/                   # Trọng số YOLO (*.pt)
+│   ├── inputs/                   # Ảnh/Video đầu vào để test CLI
+│   └── outputs/                  # Nơi xuất kết quả
+│       ├── cli_results/          # File xuất ra khi chạy CLI
+│       └── web_results/          # File xuất ra khi chạy Web
+│
+├── run_server.py                 # 🚀 Entry point chạy Web
+├── run_cli.py                    # 🚀 Entry point chạy Terminal
+├── requirements.txt
+└── README.md
 ```
 
 ## 🚀 Cài đặt & Chạy
@@ -62,12 +78,25 @@ pip install -r requirements.txt
 
 ### 2. Tải model
 
-Tải 3 file model từ Google Drive và đặt vào thư mục `models/`:
+Tải 3 file model từ Google Drive và đặt vào thư mục `data/models/`:
 - `stage1.pt` — Phát hiện xe máy (~158 MB)
 - `stage2.pt` — Nhận diện mũ & biển số (~18 MB)
 - `stage3.pt` — OCR ký tự biển số (~20 MB)
 
-### 3. Chạy giao diện Web
+### 3. Chạy giao diện Web (Flask) ⭐ Khuyên dùng
+
+```bash
+python run_server.py
+```
+
+Mở trình duyệt tại **http://localhost:5000**
+
+Giao diện bao gồm:
+- **Trang chủ**: Chế độ Camera giả lập real-time + Chế độ Upload ảnh/video
+- **Lịch sử Vi phạm**: Bảng dữ liệu, Biểu đồ thống kê, Xem ảnh bằng chứng, Lọc/Tải/Xóa
+- **Thông báo Toast**: Cảnh báo vi phạm mới theo thời gian thực
+
+### 4. Chạy giao diện Web (Streamlit) — Phiên bản cũ
 
 ```bash
 streamlit run app.py
@@ -75,15 +104,15 @@ streamlit run app.py
 
 Mở trình duyệt tại **http://localhost:8501**
 
-### 4. Chạy bằng Terminal (CLI)
+### 5. Chạy bằng Terminal (CLI)
 
-Đặt ảnh/video vào `test_inputs/` rồi chạy:
+Đặt ảnh/video vào `data/inputs/` rồi chạy:
 
 ```bash
-python main_pipeline.py
+python run_cli.py
 ```
 
-Kết quả sẽ lưu vào `test_outputs/`
+Kết quả sẽ lưu vào `data/outputs/cli_results/`
 
 ## ⚙️ Yêu cầu hệ thống
 
