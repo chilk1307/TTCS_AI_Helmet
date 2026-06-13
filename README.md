@@ -96,15 +96,7 @@ Giao diện bao gồm:
 - **Lịch sử Vi phạm**: Bảng dữ liệu, Biểu đồ thống kê, Xem ảnh bằng chứng, Lọc/Tải/Xóa
 - **Thông báo Toast**: Cảnh báo vi phạm mới theo thời gian thực
 
-### 4. Chạy giao diện Web (Streamlit) — Phiên bản cũ
-
-```bash
-streamlit run app.py
-```
-
-Mở trình duyệt tại **http://localhost:8501**
-
-### 5. Chạy bằng Terminal (CLI)
+### 4. Chạy bằng Terminal (CLI)
 
 Đặt ảnh/video vào `data/inputs/` rồi chạy:
 
