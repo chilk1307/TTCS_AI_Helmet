@@ -187,10 +187,6 @@ def process_logic(img, model_s1, model_s2, model_s3, output_dir, tracker, is_vid
                 else:
                     track_id = index + 1
 
-                # Đánh dấu ID vẫn còn trong khung hình (cho video tracker)
-                if is_video:
-                    tracker.mark_seen(track_id, frame_idx)
-
                 # Vẽ khung xe lên ảnh HIỂN THỊ (không phải ảnh sạch)
                 cv2.rectangle(img, (x1, y1), (x2, y2), COLORS['motorcyclist'], 2)
                 cv2.putText(img, f"ID: {track_id}", (x1, y1-10),
@@ -203,6 +199,9 @@ def process_logic(img, model_s1, model_s2, model_s3, output_dir, tracker, is_vid
                         # Nằm ngoài vùng → Chỉ tracking, bỏ qua Stage 2+3
                         continue
                     
+                    # Đánh dấu ID vẫn còn trong vùng nhận diện (cho video tracker)
+                    tracker.mark_seen(track_id, frame_idx)
+
                     # Nếu xe đã được ghi biên bản → Không cần tốn công đọc lại
                     if tracker.is_logged(track_id):
                         cv2.putText(img, "LOGGED", (x1, y1 - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
@@ -266,6 +265,16 @@ def process_logic(img, model_s1, model_s2, model_s3, output_dir, tracker, is_vid
                 # ★ LOGIC PHÁN QUYẾT VI PHẠM — THÔNG MINH
                 violation_detected = _judge_helmet_violation(helmet_detections, crop_h)
 
+                if is_video:
+                    # Có nhìn thấy đầu người không?
+                    has_head_detection = len(helmet_detections) > 0
+                    if has_head_detection:
+                        tracker.record_vote(track_id, is_violation=violation_detected)
+
+                # Khoá trạng thái: Cần ít nhất N frames vi phạm để khóa khung đỏ (chống False Positive hiển thị)
+                already_violated = is_video and tracker.is_confirmed_violator_ui(track_id)
+                is_violator = already_violated if is_video else violation_detected
+
                 # 4. ĐỌC BIỂN SỐ (Stage 3)
                 final_plate_text = ""
                 if plate_box is not None:
@@ -282,7 +291,7 @@ def process_logic(img, model_s1, model_s2, model_s3, output_dir, tracker, is_vid
                             final_plate_text = read_plate_yolo26(clean_plate, model_s3)
 
                 # 5. GHI BIÊN BẢN & HIỂN THỊ
-                if violation_detected and final_plate_text:
+                if is_violator and final_plate_text:
                     cv2.putText(img, f"PHAT NGUOI: {final_plate_text}", (x1, y1 - 30),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.8, COLORS['nohelmet'], 2)
 

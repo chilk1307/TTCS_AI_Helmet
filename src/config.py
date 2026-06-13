@@ -45,8 +45,16 @@ CSV_UPDATE_INTERVAL = 15    # Cập nhật bảng CSV trên UI mỗi N frame
 ZONE_Y_MIN_RATIO = 0.30
 ZONE_Y_MAX_RATIO = 0.80
 
-# ── Deferred Logging (Video) ──────────────────────────────
-# Số frame không thấy ID → coi là đã rời khung hình → ghi biên bản
+# ── Deferred Logging & Tracking Logic (Video) ─────────────
+# Cần tối thiểu N frame nhận diện "không mũ" để bắt đầu hiện khung ĐỎ báo Phạt Nguội trên màn hình
+MIN_VIOLATION_FRAMES = 3
+
+# Tỷ lệ vi phạm tối thiểu để chốt hạ ghi biên bản (Post-processing)
+# = (Số frame không mũ) / (Số frame có mũ + Số frame không mũ)
+# Ví dụ 0.4 (40%) nghĩa là: nếu AI nhìn rõ đầu người trong 10 frame, phải có ít nhất 4 frame không mũ thì mới lập biên bản.
+MIN_VIOLATION_RATIO = 0.40
+
+# Số frame không thấy ID → coi là đã rời khung hình → tiến hành xét duyệt tỷ lệ để ghi biên bản
 LOST_ID_THRESHOLD = 30
 
 # ── OCR ──────────────────────────────────────────────────

@@ -32,6 +32,7 @@ from src.engine.core.tracking_engine import ViolationTracker
 from src.config import (
     MODEL_STAGE1, MODEL_STAGE2, MODEL_STAGE3,
     SKIP_FRAMES, STAGE1_CONF, STAGE1_IMGSZ,
+    ZONE_Y_MIN_RATIO, ZONE_Y_MAX_RATIO,
 )
 
 warnings.filterwarnings("ignore")
@@ -306,10 +307,16 @@ def _process_video(task, task_id):
                 )[0]
                 processed = frame
                 if res_s1.boxes is not None:
+                    img_h = frame.shape[0]
+                    zone_y_min = int(img_h * ZONE_Y_MIN_RATIO)
+                    zone_y_max = int(img_h * ZONE_Y_MAX_RATIO)
                     max_vehicles = max(max_vehicles, len(res_s1.boxes))
                     for box1 in res_s1.boxes:
                         if box1.id is not None:
-                            tracker.mark_seen(int(box1.id[0]), frame_idx)
+                            y1, y2 = box1.xyxy[0][1], box1.xyxy[0][3]
+                            veh_cy = (y1 + y2) / 2
+                            if zone_y_min <= veh_cy <= zone_y_max:
+                                tracker.mark_seen(int(box1.id[0]), frame_idx)
 
             # Chỉ gửi các frame đã được vẽ bounding box (run_full)
             if run_full:
@@ -325,8 +332,13 @@ def _process_video(task, task_id):
         finalized = tracker.finalize(WEB_OUTPUT_DIR)
         total_violations += finalized
         cap.release()
-        try: os.unlink(path)
-        except: pass
+        import time
+        for _ in range(5):
+            try:
+                os.unlink(path)
+                break
+            except Exception:
+                time.sleep(0.2)
 
     yield sse_event({
         "type": "done",
@@ -409,10 +421,16 @@ def camera_stream():
                     )[0]
                     processed = frame
                     if res_s1.boxes is not None:
+                        img_h = frame.shape[0]
+                        zone_y_min = int(img_h * ZONE_Y_MIN_RATIO)
+                        zone_y_max = int(img_h * ZONE_Y_MAX_RATIO)
                         max_vehicles = max(max_vehicles, len(res_s1.boxes))
                         for box1 in res_s1.boxes:
                             if box1.id is not None:
-                                tracker.mark_seen(int(box1.id[0]), frame_idx)
+                                y1, y2 = box1.xyxy[0][1], box1.xyxy[0][3]
+                                veh_cy = (y1 + y2) / 2
+                                if zone_y_min <= veh_cy <= zone_y_max:
+                                    tracker.mark_seen(int(box1.id[0]), frame_idx)
 
                 # Chỉ gửi các frame đã được vẽ bounding box (run_full)
                 if run_full:
