@@ -19,17 +19,9 @@ def log_violation(plate_text, evidence_img, output_dir):
     if not plate_text:
         plate_text = "KHONG_RO"
 
-    # Phân biệt đường dẫn theo nguồn gọi (Web hay Terminal)
-    is_web = 'web_results' in output_dir or 'outputs' in output_dir
-    
-    if is_web:
-        # Web UI: Ảnh → data/outputs/web_results/images/ | CSV → data/outputs/web_results/reports/
-        img_dir = os.path.join(output_dir, 'images')
-        csv_dir = os.path.join(output_dir, 'reports')
-    else:
-        # Terminal: Ảnh → data/outputs/cli_results/images/ | CSV → data/outputs/cli_results/
-        img_dir = os.path.join(output_dir, 'images')
-        csv_dir = output_dir
+    # Cả Web và Terminal đều lưu chung cấu trúc: Ảnh vào images/, CSV vào reports/
+    img_dir = os.path.join(output_dir, 'images')
+    csv_dir = os.path.join(output_dir, 'reports')
     
     # Đảm bảo thư mục tồn tại
     os.makedirs(img_dir, exist_ok=True)
