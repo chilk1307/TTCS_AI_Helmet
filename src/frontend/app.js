@@ -585,5 +585,27 @@ document.addEventListener("click", (e) => {
 
 // Close modal bằng phím Escape
 document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeModal();
+    if (e.key === "Escape") {
+        closeModal();
+        closeLightbox();
+    }
 });
+
+
+// ══════════════════════════════════════════════════════════
+// 10. LIGHTBOX — Phóng to ảnh kết quả
+// ══════════════════════════════════════════════════════════
+
+function openLightbox(src) {
+    if (!src) return;
+    const lb = document.getElementById("lightbox");
+    document.getElementById("lightbox-img").src = src;
+    lb.classList.remove("hidden");
+    lb.classList.add("flex");
+}
+
+function closeLightbox() {
+    const lb = document.getElementById("lightbox");
+    lb.classList.add("hidden");
+    lb.classList.remove("flex");
+}

@@ -266,7 +266,7 @@ def _process_video(task, task_id):
     model_s1.predictor = None  # Reset YOLO tracker nội bộ
 
     frame_idx = 0
-    max_vehicles = 0
+    all_seen_ids = set()  # ★ Tập hợp TẤT CẢ unique track IDs từng thấy trong video
     total_violations = 0
 
     yield sse_event({
@@ -289,12 +289,14 @@ def _process_video(task, task_id):
             run_full = (frame_idx % SKIP_FRAMES == 0)
 
             if run_full:
-                yield sse_event({"type": "stage", "stage": 2, "text": f"Frame {frame_idx}/{total_frames}"})
+                yield sse_event({"type": "stage", "stage": 3, "text": f"Frame {frame_idx}/{total_frames}"})
                 processed, stats = process_logic(
                     frame, model_s1, model_s2, model_s3,
                     WEB_OUTPUT_DIR, tracker, is_video=True, frame_idx=frame_idx,
                 )
-                max_vehicles = max(max_vehicles, stats["total_vehicles"])
+                # ★ Thu thập unique IDs từ YOLO tracker boxes
+                if hasattr(processed, '__class__'):  # processed là frame
+                    pass  # IDs được thu thập qua res_s1 bên trong process_logic
                 total_violations += stats["violations_this_frame"]
 
                 if stats["violations_this_frame"] > 0:
@@ -310,13 +312,18 @@ def _process_video(task, task_id):
                     img_h = frame.shape[0]
                     zone_y_min = int(img_h * ZONE_Y_MIN_RATIO)
                     zone_y_max = int(img_h * ZONE_Y_MAX_RATIO)
-                    max_vehicles = max(max_vehicles, len(res_s1.boxes))
                     for box1 in res_s1.boxes:
                         if box1.id is not None:
+                            tid = int(box1.id[0])
+                            all_seen_ids.add(tid)  # ★ Đếm unique ID
                             y1, y2 = box1.xyxy[0][1], box1.xyxy[0][3]
                             veh_cy = (y1 + y2) / 2
                             if zone_y_min <= veh_cy <= zone_y_max:
-                                tracker.mark_seen(int(box1.id[0]), frame_idx)
+                                tracker.mark_seen(tid, frame_idx)
+
+            # ★ Thu thập unique IDs từ tracker.last_seen (bao gồm cả run_full frames)
+            all_seen_ids.update(tracker.last_seen.keys())
+            all_seen_ids.update(tracker.logged_ids)
 
             # Chỉ gửi các frame đã được vẽ bounding box (run_full)
             if run_full:
@@ -324,7 +331,7 @@ def _process_video(task, task_id):
                 yield sse_event({
                     "type": "frame",
                     "image": b64,
-                    "stats": {"vehicles": max_vehicles, "violations": total_violations},
+                    "stats": {"vehicles": len(all_seen_ids), "violations": total_violations},
                     "progress": {"current": frame_idx, "total": total_frames},
                 })
     finally:
@@ -342,7 +349,7 @@ def _process_video(task, task_id):
 
     yield sse_event({
         "type": "done",
-        "total_vehicles": max_vehicles,
+        "total_vehicles": len(all_seen_ids),
         "total_violations": total_violations,
         "total_frames": frame_idx,
     })
@@ -380,7 +387,7 @@ def camera_stream():
             model_s3.predictor = None
 
             frame_idx = 0
-            max_vehicles = 0
+            all_seen_ids = set()  # ★ Unique IDs
             total_violations = 0
 
             yield sse_event({
@@ -409,7 +416,6 @@ def camera_stream():
                         frame, model_s1, model_s2, model_s3,
                         WEB_OUTPUT_DIR, tracker, is_video=True, frame_idx=frame_idx,
                     )
-                    max_vehicles = max(max_vehicles, stats["total_vehicles"])
                     total_violations += stats["violations_this_frame"]
 
                     if stats["violations_this_frame"] > 0:
@@ -424,13 +430,18 @@ def camera_stream():
                         img_h = frame.shape[0]
                         zone_y_min = int(img_h * ZONE_Y_MIN_RATIO)
                         zone_y_max = int(img_h * ZONE_Y_MAX_RATIO)
-                        max_vehicles = max(max_vehicles, len(res_s1.boxes))
                         for box1 in res_s1.boxes:
                             if box1.id is not None:
+                                tid = int(box1.id[0])
+                                all_seen_ids.add(tid)
                                 y1, y2 = box1.xyxy[0][1], box1.xyxy[0][3]
                                 veh_cy = (y1 + y2) / 2
                                 if zone_y_min <= veh_cy <= zone_y_max:
-                                    tracker.mark_seen(int(box1.id[0]), frame_idx)
+                                    tracker.mark_seen(tid, frame_idx)
+
+                # ★ Thu thập unique IDs
+                all_seen_ids.update(tracker.last_seen.keys())
+                all_seen_ids.update(tracker.logged_ids)
 
                 # Chỉ gửi các frame đã được vẽ bounding box (run_full)
                 if run_full:
@@ -438,7 +449,7 @@ def camera_stream():
                     yield sse_event({
                         "type": "frame",
                         "image": b64,
-                        "stats": {"vehicles": max_vehicles, "violations": total_violations},
+                        "stats": {"vehicles": len(all_seen_ids), "violations": total_violations},
                         "frame_idx": frame_idx,
                     })
 
