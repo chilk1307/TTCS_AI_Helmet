@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Giám sát Giao thông AI</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="dashboard-page">
+    <header class="topbar">
+        <div class="topbar-left">
+            <span class="logo-icon">🚦</span>
+            <h2>Giám sát Giao thông AI</h2>
+        </div>
+        <div class="topbar-right">
+            <span class="status-badge" id="systemStatus">Sẵn sàng</span>
+            <button class="btn-logout" onclick="logout()">Đăng xuất</button>
+        </div>
+    </header>
+
+    <div class="dashboard-container">
+        <!-- Mode Tabs -->
+        <div class="mode-tabs">
+            <button class="tab active" data-tab="upload">Upload Video Demo</button>
+            <button class="tab" data-tab="camera">Camera IP</button>
+        </div>
+
+        <!-- Camera IP Mode -->
+        <div class="tab-content" id="tab-camera" style="display:none;">
+            <div class="card">
+                <h3>Kết nối Camera IP</h3>
+                <div class="form-group">
+                    <label>URL Camera IP</label>
+                    <input type="text" id="cameraUrl" placeholder="rtsp://192.168.1.100:554/stream">
+                </div>
+                <button class="btn-primary" disabled>Kết nối</button>
+                <div class="coming-soon">
+                    <p>⚠️ Tính năng đang phát triển</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Upload Video Mode -->
+        <div class="tab-content" id="tab-upload">
+            <div class="grid-layout">
+                <!-- Left: Video Stream -->
+                <div class="card video-card">
+                    <div class="card-header">
+                        <h3>Video Realtime</h3>
+                        <div class="fps-display">
+                            <span id="fpsDisplay">0 FPS</span>
+                        </div>
+                    </div>
+                    <div class="video-container" id="videoContainer">
+                        <div class="video-placeholder" id="videoPlaceholder">
+                            <p>Chưa có video. Vui lòng upload video để bắt đầu.</p>
+                        </div>
+                        <img id="streamFrame" style="display:none; width:100%; height:auto;" alt="Stream">
+                    </div>
+                    <div class="video-controls">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="showRoi" onchange="toggleRoi()">
+                            Hiển thị vùng quét (ROI)
+                        </label>
+                        <span class="roi-hint">Hệ thống đang quét vùng đường phía dưới khung hình để tối ưu hiệu năng.</span>
+                    </div>
+                </div>
+
+                <!-- Right: Controls + Stats -->
+                <div class="sidebar">
+                    <!-- Upload Card -->
+                    <div class="card">
+                        <h3>Upload Video</h3>
+                        <div class="upload-area" id="uploadArea">
+                            <input type="file" id="videoFile" accept="video/*" style="display:none;">
+                            <p>Kéo thả video hoặc <a href="#" onclick="document.getElementById('videoFile').click()">chọn file</a></p>
+                            <span id="fileName" class="file-name"></span>
+                        </div>
+                        <button class="btn-primary" id="btnUpload" onclick="uploadVideo()" disabled>Tải lên</button>
+                        <button class="btn-success" id="btnStart" onclick="startAnalysis()" style="display:none;">Bắt đầu phân tích</button>
+                        <button class="btn-danger" id="btnStop" onclick="stopAnalysis()" style="display:none;">Dừng</button>
+                    </div>
+
+                    <!-- Pipeline Status -->
+                    <div class="card">
+                        <h3>Trạng thái Pipeline</h3>
+                        <div class="status-list">
+                            <div class="status-item">
+                                <span class="dot" id="dotReader"></span>
+                                <span>Đọc video</span>
+                                <span class="status-val" id="valInputFps">-</span>
+                            </div>
+                            <div class="status-item">
+                                <span class="dot" id="dotStage1"></span>
+                                <span>Detect xe máy (Stage 1)</span>
+                                <span class="status-val" id="valStage1Fps">-</span>
+                            </div>
+                            <div class="status-item">
+                                <span class="dot" id="dotViolation"></span>
+                                <span>Xử lý vi phạm</span>
+                                <span class="status-val" id="valViolationFps">-</span>
+                            </div>
+                            <div class="status-item">
+                                <span class="dot" id="dotQueue"></span>
+                                <span>Queue chờ</span>
+                                <span class="status-val" id="valQueueSize">-</span>
+                            </div>
+                            <div class="status-item">
+                                <span class="dot" id="dotViolations"></span>
+                                <span>Vi phạm phát hiện</span>
+                                <span class="status-val violations-count" id="valViolationsCount">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Violations Table -->
+            <div class="card violations-card">
+                <div class="card-header">
+                    <h3>Danh sách Vi phạm</h3>
+                    <button class="btn-sm" onclick="refreshViolations()">Làm mới</button>
+                </div>
+                <div class="table-container">
+                    <table id="violationsTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Tên</th>
+                                <th>Biển số</th>
+                                <th>Thời gian</th>
+                                <th>Frame</th>
+                                <th>Độ tin cậy</th>
+                                <th>Minh chứng</th>
+                            </tr>
+                        </thead>
+                        <tbody id="violationsBody">
+                            <tr><td colspan="7" class="empty-row">Chưa có vi phạm nào</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Evidence Modal -->
+    <div id="evidenceModal" class="modal" style="display:none;" onclick="closeModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <span class="modal-close" onclick="closeModal()">&times;</span>
+            <img id="modalImage" src="" alt="Minh chứng">
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
