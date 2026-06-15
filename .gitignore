@@ -1,0 +1,68 @@
+# Storage (keep folder structure via .gitkeep)
+storage/uploads/*
+!storage/uploads/.gitkeep
+storage/evidence/*
+!storage/evidence/.gitkeep
+storage/violations/*
+!storage/violations/.gitkeep
+storage/violations/reports/*
+!storage/violations/reports/.gitkeep
+
+# Models hosted on Hugging Face
+models/**/*
+!models/README.md
+!models/stage1/.gitkeep
+!models/stage2/.gitkeep
+!models/stage3/.gitkeep
+
+# Model weights
+*.pt
+*.onnx
+*.engine
+
+# compare-test large assets (scripts only on GitHub)
+compare-test/stage1/
+compare-test/stage2/
+compare-test/results/
+compare-test/*.zip
+compare-test/*.mp4
+compare-test/__pycache__/
+
+# C++ build artifacts
+cpp_inference/build/
+
+# Videos
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.zip
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+.venv/
+
+# IDE / tooling
+.idea/
+.vscode/
+.cursor/
+.codex/
+.cache/
+.config/
+.copilot/
+.lightning_studio/
+*.swp
+*.swo
+
+# OS / env
+.DS_Store
+Thumbs.db
+.bash_history
+.zsh_history
+
+# Logs
+*.log
