@@ -325,15 +325,23 @@ def _process_video(task, task_id):
             all_seen_ids.update(tracker.last_seen.keys())
             all_seen_ids.update(tracker.logged_ids)
 
-            # Chỉ gửi các frame đã được vẽ bounding box (run_full)
-            if run_full:
-                b64 = encode_frame(processed, quality=65)
-                yield sse_event({
-                    "type": "frame",
-                    "image": b64,
-                    "stats": {"vehicles": len(all_seen_ids), "violations": total_violations},
-                    "progress": {"current": frame_idx, "total": total_frames},
-                })
+            # ★ TỐI ƯU MƯỢT MÀ: Gửi TẤT CẢ các frame để web không bị giật cục
+            # Resize frame nhỏ lại để mã hóa Base64 và truyền mạng siêu tốc
+            img_h, img_w = processed.shape[:2]
+            target_w = 800
+            if img_w > target_w:
+                ratio = target_w / img_w
+                display_frame = cv2.resize(processed, (target_w, int(img_h * ratio)))
+            else:
+                display_frame = processed
+
+            b64 = encode_frame(display_frame, quality=60)
+            yield sse_event({
+                "type": "frame",
+                "image": b64,
+                "stats": {"vehicles": len(all_seen_ids), "violations": total_violations},
+                "progress": {"current": frame_idx, "total": total_frames},
+            })
     finally:
         # Ghi biên bản cho xe còn lại
         finalized = tracker.finalize(WEB_OUTPUT_DIR)
@@ -443,15 +451,23 @@ def camera_stream():
                 all_seen_ids.update(tracker.last_seen.keys())
                 all_seen_ids.update(tracker.logged_ids)
 
-                # Chỉ gửi các frame đã được vẽ bounding box (run_full)
-                if run_full:
-                    b64 = encode_frame(processed, quality=60)
-                    yield sse_event({
-                        "type": "frame",
-                        "image": b64,
-                        "stats": {"vehicles": len(all_seen_ids), "violations": total_violations},
-                        "frame_idx": frame_idx,
-                    })
+                # ★ TỐI ƯU MƯỢT MÀ: Gửi TẤT CẢ các frame để web không bị giật cục
+                # Resize frame nhỏ lại để mã hóa Base64 và truyền mạng siêu tốc
+                img_h, img_w = processed.shape[:2]
+                target_w = 800
+                if img_w > target_w:
+                    ratio = target_w / img_w
+                    display_frame = cv2.resize(processed, (target_w, int(img_h * ratio)))
+                else:
+                    display_frame = processed
+
+                b64 = encode_frame(display_frame, quality=60)
+                yield sse_event({
+                    "type": "frame",
+                    "image": b64,
+                    "stats": {"vehicles": len(all_seen_ids), "violations": total_violations},
+                    "frame_idx": frame_idx,
+                })
 
                 time.sleep(0.02)  # Tránh quá tải CPU
 

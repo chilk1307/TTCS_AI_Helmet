@@ -36,7 +36,7 @@ HELMET_REGION_RATIO = 0.55
 HELMET_CONF_MARGIN = 0.15
 
 # ── Video Processing ──────────────────────────────────────
-SKIP_FRAMES = 2             # Chỉ chạy Stage 2+3 mỗi N frame (Stage 1 track luôn chạy)
+SKIP_FRAMES = 3             # Chỉ chạy Stage 2+3 mỗi N frame (Stage 1 track luôn chạy)
 CSV_UPDATE_INTERVAL = 15    # Cập nhật bảng CSV trên UI mỗi N frame
 
 # ★ Vùng Nhận Diện (Detection Zone) - Chỉ áp dụng cho video
