@@ -161,8 +161,27 @@
         }
 
         /* Zoom cursor for images */
-        .zoomable {
-            cursor: zoom-in;
+        .zoomable { cursor: zoom-in; transition: all 0.3s ease; }
+        
+        /* Lightbox Fullscreen for MJPEG */
+        .lightbox-mode {
+            position: fixed !important;
+            top: 0 !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            margin: auto !important;
+            width: 80vw !important;
+            height: 80vh !important;
+            max-width: 1200px !important;
+            max-height: 800px !important;
+            z-index: 100 !important;
+            object-fit: contain !important;
+            background: rgba(0,0,0,0.95) !important;
+            padding: 10px !important;
+            border-radius: 16px !important;
+            box-shadow: 0 0 0 100vmax rgba(0,0,0,0.9) !important;
+            cursor: zoom-out !important;
         }
     </style>
 </head>
@@ -266,8 +285,7 @@
                     <!-- Camera display -->
                     <div class="relative bg-black/60 rounded-xl overflow-hidden flex items-center justify-center"
                         style="min-height:400px;">
-                        <img id="camera-feed" src="" alt="Camera Feed" class="w-full hidden rounded-xl zoomable"
-                            onclick="openLightbox(this.src)">
+                        <img id="camera-feed" src="" alt="Camera Feed" class="w-full hidden rounded-xl zoomable" onclick="toggleLightbox(this)">
                         <div id="camera-placeholder" class="text-center p-8">
                             <p class="text-5xl mb-4">📹</p>
                             <p class="text-slate-400 text-lg font-medium">Nhấn "Bật Camera" để bắt đầu giám sát</p>
@@ -339,8 +357,7 @@
                     <!-- Right: Result display -->
                     <div class="lg:col-span-3">
                         <div class="glass-card rounded-2xl p-4 min-h-[400px] flex items-center justify-center">
-                            <img id="result-display" src="" alt="Kết quả" class="w-full rounded-xl hidden zoomable"
-                                onclick="openLightbox(this.src)">
+                            <img id="result-display" src="" alt="Kết quả" class="w-full rounded-xl hidden zoomable" onclick="toggleLightbox(this)">
                             <div id="result-placeholder" class="text-center p-8">
                                 <p class="text-5xl mb-4">🖼️</p>
                                 <p class="text-slate-400 text-lg font-medium">Kết quả xử lý sẽ hiển thị ở đây</p>
@@ -437,18 +454,6 @@
             <img id="modal-image" src="" alt="Bằng chứng" class="w-full rounded-xl mb-4">
             <div id="modal-info" class="space-y-2"></div>
         </div>
-    </div>
-
-    <!-- Lightbox: Fullscreen Image Zoom -->
-    <div id="lightbox" class="fixed inset-0 z-[70] hidden items-center justify-center p-4"
-        style="background:rgba(0,0,0,0.9);backdrop-filter:blur(8px);cursor:zoom-out;" onclick="closeLightbox()">
-        <img id="lightbox-img" src="" alt="Zoom" class="max-w-full max-h-full rounded-xl shadow-2xl"
-            style="object-fit:contain;">
-        <div class="absolute top-4 right-4">
-            <button onclick="closeLightbox()"
-                class="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-xl transition-colors">✕</button>
-        </div>
-        <p class="absolute bottom-4 text-slate-400 text-sm">Nhấn ESC hoặc click để đóng</p>
     </div>
 
     <!-- App JS -->

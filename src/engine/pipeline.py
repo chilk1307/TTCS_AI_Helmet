@@ -275,9 +275,16 @@ def process_logic(img, model_s1, model_s2, model_s3, output_dir, tracker, is_vid
                 already_violated = is_video and tracker.is_confirmed_violator_ui(track_id)
                 is_violator = already_violated if is_video else violation_detected
 
-                # 4. ĐỌC BIỂN SỐ (Stage 3)
+                # 4. ĐỌC BIỂN SỐ (Stage 3) - TỐI ƯU HÓA THỜI GIAN
                 final_plate_text = ""
-                if plate_box is not None:
+                
+                # ★ CHỈ CHẠY OCR KHI:
+                # 1. Là ảnh (luôn chạy)
+                # 2. Hoặc là Video nhưng xe này ĐANG VI PHẠM ở frame này
+                # 3. Hoặc là Video nhưng xe này ĐÃ BỊ XÁC NHẬN LÀ VI PHẠM từ trước (cần OCR liên tục để lấy biển nét nhất)
+                run_ocr = not is_video or is_violator or violation_detected
+
+                if run_ocr and plate_box is not None:
                     px1, py1_p, px2, py2_p = plate_box
                     pw, ph = px2 - px1, py2_p - py1_p
 

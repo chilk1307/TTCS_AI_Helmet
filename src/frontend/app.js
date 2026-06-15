@@ -187,7 +187,13 @@ async function startProcessing() {
         document.getElementById("btn-cancel").classList.remove("hidden");
         document.getElementById("btn-cancel").disabled = false;
 
-        // 2. Mở SSE stream để nhận kết quả
+        // 2. Load MJPEG Stream vào thẻ img
+        const img = document.getElementById("result-display");
+        img.src = `/api/video_feed/upload/${data.task_id}`;
+        img.classList.remove("hidden");
+        document.getElementById("result-placeholder").classList.add("hidden");
+
+        // 3. Mở SSE stream để nhận tiến độ & metadata
         connectProcessSSE(data.task_id);
 
     } catch (err) {
@@ -206,8 +212,7 @@ function connectProcessSSE(taskId) {
         const d = JSON.parse(e.data);
 
         switch (d.type) {
-            case "frame":
-                showResultImage(d.image);
+            case "progress":
                 updateMetrics(d.stats.vehicles, d.stats.violations);
                 if (d.progress) {
                     const pct = Math.round((d.progress.current / d.progress.total) * 100);
@@ -306,14 +311,17 @@ function toggleCamera() {
             switch (d.type) {
                 case "camera_start":
                     document.getElementById("camera-label").textContent = `🔴 REC — ${d.source}`;
-                    document.getElementById("camera-feed").classList.remove("hidden");
+                    
+                    const img = document.getElementById("camera-feed");
+                    img.src = "/api/video_feed/camera";
+                    img.classList.remove("hidden");
+                    
                     document.getElementById("camera-placeholder").classList.add("hidden");
                     updateStatus("🔴 Camera đang giám sát");
                     showToast("Camera trực tiếp đã bật", "success");
                     break;
 
-                case "frame":
-                    document.getElementById("camera-feed").src = "data:image/jpeg;base64," + d.image;
+                case "stats":
                     updateMetrics(d.stats.vehicles, d.stats.violations);
                     break;
 
@@ -352,10 +360,7 @@ function updateStatus(text) {
 }
 
 function showResultImage(b64) {
-    const img = document.getElementById("result-display");
-    img.src = "data:image/jpeg;base64," + b64;
-    img.classList.remove("hidden");
-    document.getElementById("result-placeholder").classList.add("hidden");
+    // Không còn dùng trong MJPEG flow, hàm này chỉ để tương thích hoặc xóa đi
 }
 
 function showProgress(visible) {
@@ -597,15 +602,75 @@ document.addEventListener("keydown", (e) => {
 // ══════════════════════════════════════════════════════════
 
 function openLightbox(src) {
-    if (!src) return;
-    const lb = document.getElementById("lightbox");
-    document.getElementById("lightbox-img").src = src;
-    lb.classList.remove("hidden");
-    lb.classList.add("flex");
+    // Không dùng src nữa, chúng ta sẽ add class trực tiếp vào thẻ đang click
+    // Để gọi qua onClick, tôi sẽ dùng cách truyền this trong HTML: onclick="toggleLightbox(this)"
 }
 
 function closeLightbox() {
+    // Dọn dẹp lightbox ảo nếu còn
     const lb = document.getElementById("lightbox");
-    lb.classList.add("hidden");
-    lb.classList.remove("flex");
+    if (lb) {
+        lb.classList.add("hidden");
+        lb.classList.remove("flex");
+    }
+    
+    // Gỡ class fullscreen khỏi các ảnh đang có
+    document.querySelectorAll('.lightbox-mode').forEach(el => {
+        el.classList.remove('lightbox-mode');
+    });
 }
+
+function updateLightboxIfOpen(src) {
+    // MJPEG stream tự cập nhật, không cần hàm này nữa
+}
+
+let zoomedImg = null;
+let originalParent = null;
+let originalNextSibling = null;
+
+function toggleLightbox(imgElement) {
+    if (!imgElement) return;
+
+    if (!zoomedImg) {
+        // Phóng to: Lưu vị trí cũ
+        originalParent = imgElement.parentNode;
+        originalNextSibling = imgElement.nextSibling;
+
+        // Tạo thẻ giữ chỗ để bố cục không bị co lại
+        const placeholder = document.createElement('div');
+        placeholder.id = "zoom-placeholder";
+        placeholder.style.width = imgElement.offsetWidth + "px";
+        placeholder.style.height = imgElement.offsetHeight + "px";
+        originalParent.insertBefore(placeholder, imgElement);
+
+        // Đẩy ảnh ra body để thoát khỏi CSS backdrop-filter của cha
+        document.body.appendChild(imgElement);
+        imgElement.classList.add("lightbox-mode");
+        zoomedImg = imgElement;
+    } else if (zoomedImg === imgElement) {
+        // Thu nhỏ
+        imgElement.classList.remove("lightbox-mode");
+
+        // Đưa về chỗ cũ
+        if (originalNextSibling) {
+            originalParent.insertBefore(imgElement, originalNextSibling);
+        } else {
+            originalParent.appendChild(imgElement);
+        }
+
+        // Xóa giữ chỗ
+        const placeholder = document.getElementById("zoom-placeholder");
+        if (placeholder) placeholder.remove();
+
+        zoomedImg = null;
+        originalParent = null;
+        originalNextSibling = null;
+    }
+}
+
+// Bấm ESC để thoát zoom
+document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && zoomedImg) {
+        toggleLightbox(zoomedImg);
+    }
+});
