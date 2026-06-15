@@ -108,10 +108,24 @@ storage/
 Các tham số cấu hình nằm trong `app/core/config.py`:
 
 - `STAGE1_CONF`: Confidence threshold Stage 1 (mặc định 0.4)
-- `STAGE2_CONF`: Confidence threshold Stage 2 (mặc định 0.35)
-- `STAGE3_CONF`: Confidence threshold Stage 3/OCR (mặc định 0.3)
-- `TARGET_FPS`: FPS mục tiêu (mặc định 25)
+- `STAGE2_CONF`: Confidence threshold Stage 2 (mặc định 0.72)
+- `STAGE3_CONF`: Confidence threshold Stage 3/OCR (mặc định 0.25)
+- `TARGET_FPS`: FPS mục tiêu (mặc định 30)
 - `ENABLE_ROI`: Bật/tắt ROI (mặc định True)
 - `ROI_Y_START_RATIO`: Tỉ lệ bắt đầu quét Y (mặc định 0.45)
 - `DEDUP_SECONDS`: Thời gian dedup (mặc định 10s)
-- `QUEUE_MAX_SIZE`: Kích thước queue tối đa (mặc định 30)
+- `QUEUE_MAX_SIZE`: Kích thước queue tối đa (mặc định 50)
+
+## Tải model
+
+Model không nằm trên GitHub. Tải từ Hugging Face:
+
+```bash
+bash scripts/download_models.sh
+```
+
+Repo model: https://huggingface.co/2vhoc/helmet-detection-traffic
+
+## Dataset training (legacy)
+
+Thư mục `dataset_plate/`, `helmet.yaml`, `plate.yaml` — dữ liệu huấn luyện YOLO gốc.
